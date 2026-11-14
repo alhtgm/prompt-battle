@@ -1,0 +1,14 @@
+# Godot 4
+.godot/
+/android/
+
+# ビルド成果物
+/build/
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 操縦エージェントのモデル（大きいので別配布）
+*.gguf
