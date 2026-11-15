@@ -23,6 +23,10 @@ var session: MatchSession = null
 var screen: Control = null
 ## バトルを進める速さ（画面の「4倍」ボタン）
 var battle_speed: float = 1.0
+## 本番の頭脳（LLM）を使うか。テストでは画面に追加する前に false にする
+var use_llm: bool = true
+## 頭脳とCPUの判断。本番の頭脳のサーバーは起動時に1回だけ立ち上げ、試合をまたいで使い回す
+var agents: DefaultAgents = null
 var _shown_phase: String = ""
 var _shown_round: int = -1
 
@@ -37,7 +41,15 @@ func _ready() -> void:
 	if not data.load_dir():
 		push_error("data/ が読めない：\n" + "\n".join(data.errors))
 		return
+	agents = DefaultAgents.new(use_llm)
 	show_title()
+
+
+## ウィンドウを閉じたときや画面を外したときに、裏のサーバーを止める
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE or what == NOTIFICATION_EXIT_TREE:
+		if agents != null:
+			agents.shutdown()
 
 
 func show_title() -> void:
@@ -53,7 +65,7 @@ func start_game(seed_value: int = 0) -> void:
 	var setup: Array = [{"name": "あなた", "is_human": true}]
 	for i: int in range(1, int(data.rule("players"))):
 		setup.append({"name": "CPU%d" % i, "is_human": false})
-	session = MatchSession.new(data, seed_value, setup, DefaultAgents.new())
+	session = MatchSession.new(data, seed_value, setup, agents)
 	battle_speed = 1.0
 	_shown_phase = ""
 	_sync_screen()

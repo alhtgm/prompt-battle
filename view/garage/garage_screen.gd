@@ -20,6 +20,7 @@ var _boxes: Dictionary = {}
 var _prompt: TextEdit
 var _counter: Label
 var _timer: Label
+var _brain: Label
 var _slots: Label
 var _message: Label
 
@@ -66,6 +67,7 @@ func build_ui() -> void:
 
 	# 右：残り時間、プロンプト、出撃、体力の一覧
 	_timer = add_label("", 20, COL_ACCENT, right)
+	_brain = add_label("", 15, COL_DIM, right)
 	add_label("操縦士へのプロンプト", 22, COL_ACCENT, right)
 	add_label("操縦士はこれを読んで、試合中に自分で動き方を決める。押すと例が入る：", 15, COL_DIM, right)
 	var examples := HFlowContainer.new()
@@ -97,6 +99,7 @@ func build_ui() -> void:
 func _process(_delta: float) -> void:
 	if _timer != null and main.session != null:
 		_timer.text = "残り %d 秒（時間切れになると前の機体で出撃）" % ceili(maxf(0.0, session().phase_time_left))
+		_brain.text = main.agents.brain_status_text()
 
 
 func _on_toggled(on: bool, kind: String, uid: int) -> void:

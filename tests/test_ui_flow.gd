@@ -61,6 +61,7 @@ func _check_battle_screen(b: Node, main: Node) -> void:
 func test_play_through_from_title_to_final_ranking() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var main: Node = load("res://view/main.tscn").instantiate()
+	main.use_llm = false  # テストでは本番の頭脳のサーバーを起動しない
 	tree.root.add_child(main)
 	await _frame()
 	check(_is(main.screen, TitleScreen), "最初はタイトル画面")

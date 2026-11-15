@@ -1,17 +1,58 @@
-# 試合（MatchSession）に渡す「頭脳とCPUの判断」の標準のセット。骨組みでは全員が仮の頭脳で操縦する。
-# 本番のLLMに差し替えるときは make_brain の中身だけ変える。
+# 試合（MatchSession）に渡す「頭脳とCPUの判断」の標準のセット。
+# 本番の頭脳を使うときは、人間の機体だけをLLMで動かし、CPUと記録の再生は仮の頭脳で動かす（各PCで動かすのは自分の機体のエージェントだけ）。
 extends RefCounted
 
 const MockBrain := preload("res://agent/mock_brain.gd")
+const LlmBrain := preload("res://agent/llm_brain.gd")
+const LlmConfig := preload("res://agent/llm_config.gd")
+const LlmServer := preload("res://agent/llm_server.gd")
 const CpuPlanner := preload("res://agent/cpu_planner.gd")
 const GameData := preload("res://core/game_data.gd")
 const Rng := preload("res://core/rng.gd")
 const Player := preload("res://core/player.gd")
 
+## 本番の頭脳のサーバー（使わないときは null）
+var llm_server: LlmServer = null
+## 本番の頭脳を使えない理由
+var llm_problem: String = ""
 
-## バトル1試合ぶんの頭脳を作る（記録の再生の相手も同じ頭脳で動かす）
-func make_brain(_is_human: bool, rng: Rng) -> RefCounted:
+
+## use_llm が true なら、本番の頭脳のサーバーを裏で起動し始める（テストでは false）
+func _init(use_llm: bool = false) -> void:
+	if not use_llm:
+		llm_problem = "使わない設定"
+		return
+	var cfg := LlmConfig.new()
+	if not cfg.load_config():
+		llm_problem = cfg.problem
+		return
+	llm_server = LlmServer.new(cfg)
+	llm_server.start()
+
+
+## バトル1試合ぶんの頭脳を作る
+func make_brain(is_human: bool, rng: Rng) -> RefCounted:
+	if is_human and llm_server != null and not llm_server.is_failed():
+		return LlmBrain.new(llm_server, MockBrain.new(rng))
 	return MockBrain.new(rng)
+
+
+## 画面に出す、人間の機体の頭脳の説明
+func brain_status_text() -> String:
+	if llm_server == null:
+		return "操縦士：仮の頭脳（%s）" % llm_problem
+	match llm_server.update():
+		LlmServer.Status.READY:
+			return "操縦士：本番の頭脳（%s）" % llm_server.model_name()
+		LlmServer.Status.STARTING:
+			return "操縦士：本番の頭脳を準備中…（%s）" % llm_server.model_name()
+	return "操縦士：仮の頭脳（%s）" % llm_server.problem
+
+
+## ゲームを終えるときにサーバーを止める
+func shutdown() -> void:
+	if llm_server != null:
+		llm_server.stop()
 
 
 func pick_draft(offer: Dictionary, rng: Rng) -> Dictionary:
