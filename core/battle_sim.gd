@@ -45,6 +45,8 @@ var over: bool = false
 var result: Dictionary = {}
 ## この刻みで起きた出来事（画面の演出と実況用）
 var events: Array[Dictionary] = []
+## 試合を通した出来事の記録（弾を撃った、は省く）。各出来事に "t"（試合時間）を付ける。画面の実況用
+var log: Array[Dictionary] = []
 
 var _brains: Array = []
 var _b: Dictionary = {}
@@ -136,6 +138,11 @@ func step() -> void:
 	for i: int in 2:
 		_hazards(i)  # 6. 修理ステーションと穴
 	_check_over()  # 7. 決着
+	for e: Dictionary in events:
+		if e["type"] != "shot":
+			var logged: Dictionary = e.duplicate()
+			logged["t"] = t
+			log.append(logged)
 
 
 ## 比較・保存用に、今の状態をまるごと辞書にする

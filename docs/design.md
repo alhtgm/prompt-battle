@@ -239,6 +239,8 @@ prompt-battle/
 │  └─ cpu_planner.gd      CPUプレイヤーの組み立てとプロンプトを決める
 ├─ view/                  画面（Godotのシーン）
 │  ├─ main.tscn           段階に合わせて画面を切り替える
+│  ├─ screen_base.gd      各画面の土台（文字・ボタン・体力の一覧を足す手伝い）
+│  ├─ ui_text.gd          画面で使う文字の組み立て（パーツの説明、実況の行など）
 │  ├─ title/              タイトル
 │  ├─ draft/              開始時のパーツ選び、配布、パーク選び
 │  ├─ garage/             組み立てとプロンプト入力

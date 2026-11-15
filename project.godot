@@ -5,8 +5,7 @@ config_version=5
 [application]
 
 config/name="プロンプトバトル"
-; 段階4で view/main.tscn ができるまでは、開発用の観戦画面を起動する
-run/main_scene="res://view/debug/battle_viewer.tscn"
+run/main_scene="res://view/main.tscn"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 
 [display]
