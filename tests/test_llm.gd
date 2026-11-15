@@ -32,6 +32,21 @@ func test_system_prompt_has_rules_build_and_player_prompt() -> void:
 	check(empty.contains("指示なし") and empty.contains("skill はいつも null"), "指示もスキルもないときの書き方")
 
 
+func test_examples_sit_right_before_player_prompt() -> void:
+	var s: String = LlmBrain.build_system_prompt("初手で修理ステーションに行き居座れ", BUILD, 12)
+	var ex: int = s.find("指示と方針の例")
+	var pp: int = s.find("プレイヤーの指示：")
+	check(ex > 0 and ex < pp, "対応例はプレイヤーの指示の直前にある")
+	check(s.contains("修理ステーションに居続けるのもこれ"), "修理に向かう方針は、着いたら留まることまで説明されている")
+	check(not LlmBrain.EXAMPLES.contains("居座"), "対応例に測定用のプロンプトの言葉を入れない")
+
+
+func test_prewarm_does_nothing_without_llm() -> void:
+	var agents := DefaultAgents.new()
+	agents.prewarm("突撃しろ", BUILD)  # 本番の頭脳を使わないときは何もしない（エラーにならない）
+	check(agents.llm_server == null, "サーバーは起動しない")
+
+
 func test_grammar_limits_intents_skills_and_say() -> void:
 	var g: String = LlmBrain.build_grammar(2, 12)
 	check(g.begins_with("root ::= \"{\\\"intent\\\":\\\"\" intent"), "答えの形が詰めたJSON")

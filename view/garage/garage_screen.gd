@@ -3,6 +3,11 @@
 extends "res://view/screen_base.gd"
 
 const GameData := preload("res://core/game_data.gd")
+const Build := preload("res://core/build.gd")
+const BattleSim := preload("res://core/battle_sim.gd")
+
+## 手が止まってから、本番の頭脳に指示文を先読みさせるまでの時間（ミリ秒）
+const PREWARM_IDLE_MS: int = 1200
 
 ## 押すとプロンプト欄に入る例（[ボタンの名前, プロンプト]）
 const PROMPT_EXAMPLES: Array = [
@@ -21,6 +26,7 @@ var _prompt: TextEdit
 var _counter: Label
 var _timer: Label
 var _brain: Label
+var _edited_at: int = 0
 var _slots: Label
 var _message: Label
 
@@ -100,6 +106,25 @@ func _process(_delta: float) -> void:
 	if _timer != null and main.session != null:
 		_timer.text = "残り %d 秒（時間切れになると前の機体で出撃）" % ceili(maxf(0.0, session().phase_time_left))
 		_brain.text = main.agents.brain_status_text()
+	if _edited_at > 0 and Time.get_ticks_msec() - _edited_at > PREWARM_IDLE_MS:
+		_edited_at = 0
+		_prewarm()
+
+
+## 本番の頭脳に、今の機体とプロンプトの指示文を先読みさせる（試合開始直後の最初の答えを早める）。
+## 組み立てが正しくないときは何もしない
+func _prewarm() -> void:
+	var p: Variant = me()
+	var b := Build.new()
+	b.frame = p.find_part(frame_uid)
+	for uid: int in weapon_uids:
+		b.weapons.append(p.find_part(uid))
+	for uid: int in skill_uids:
+		b.skills.append(p.find_part(uid))
+	if b.frame == null or b.weapons.has(null) or b.skills.has(null) \
+			or not b.validate(main.data, p.extra_weapon_slots(main.data), p.extra_skill_slots(main.data)).is_empty():
+		return
+	main.agents.prewarm(_prompt.text, BattleSim.build_summary(main.data, b))
 
 
 func _on_toggled(on: bool, kind: String, uid: int) -> void:
@@ -152,6 +177,7 @@ func _sync_boxes() -> void:
 
 
 func _update_info() -> void:
+	_edited_at = Time.get_ticks_msec()  # 手が止まったら先読みする
 	var p: Variant = me()
 	var data: GameData = main.data
 	var max_w: int = p.extra_weapon_slots(data)

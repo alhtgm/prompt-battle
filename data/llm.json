@@ -19,7 +19,7 @@
   "port": 8399,
   "ctx_size": 4096,
   "threads": 8,
-  "temperature": 0.3,
+  "temperature": 0.0,
   "max_tokens": 48,
   "say_max_chars": 12,
   "obs_style": "json",

@@ -20,6 +20,7 @@ const VARIANTS: Dictionary = {
 	"json": {"obs_style": "json", "say_first": false},
 	"text": {"obs_style": "text", "say_first": false},
 	"text_say": {"obs_style": "text", "say_first": true},
+	"greedy": {"temperature": 0.0},
 }
 
 const MELEE: Dictionary = {
@@ -47,6 +48,8 @@ const CASES: Array = [
 	["逃げ", "melee", "とにかく逃げ回れ", {}, ["retreat", "circle"]],
 	["条件：体力が3割未満", "melee", "強気でいけ。でも体力が3割を切ったら逃げろ", {"me.hp": 20}, ["retreat", "go_repair"]],
 	["条件：体力が多い", "melee", "強気でいけ。でも体力が3割を切ったら逃げろ", {"me.hp": 85}, ["charge"]],
+	["居座り：試合開始直後", "melee", "初手で修理ステーションに行き居座れ", {"me.hp": 100, "me.intent": "hold", "time_left": 75.0, "enemy.dist": 22.0}, ["go_repair"]],
+	["居座り：着いた後", "melee", "初手で修理ステーションに行き居座れ", {"me.hp": 100, "me.intent": "go_repair", "repair.dist": 0.4, "enemy.dist": 6.0}, ["go_repair"]],
 ]
 
 
@@ -73,7 +76,10 @@ func _obs_for(build_key: String, patch: Dictionary) -> Dictionary:
 		obs["me"]["ammo"] = 80
 	for path: String in patch:
 		var parts: PackedStringArray = path.split(".")
-		obs[parts[0]][parts[1]] = patch[path]
+		if parts.size() == 1:
+			obs[path] = patch[path]
+		else:
+			obs[parts[0]][parts[1]] = patch[path]
 	return obs
 
 
@@ -133,6 +139,12 @@ func _bench_one(data: GameData, model: String, variant: String, repeat: int, sum
 	for c: Array in CASES:
 		var brain := LlmBrain.new(server)
 		brain.begin(c[2], MELEE if c[1] == "melee" else GUNNER, data.rules)
+		if OS.get_cmdline_user_args().has("--prewarm"):
+			# 組み立て中の先読みを真似る（ゲームでは組み立て画面で手が止まったときに行う）
+			server.prewarm(brain.system_prompt)
+			while server.warmed_prompt != brain.system_prompt and Time.get_ticks_msec() - t0 < 600000:
+				server.update()
+				await process_frame
 		for k: int in repeat:
 			var before: int = brain.stats["total_ms"]
 			var obs: Dictionary = _obs_for(c[1], c[3])

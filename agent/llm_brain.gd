@@ -14,15 +14,24 @@ const INTENT_TEXT: Dictionary = {
 	"keep_distance": "相手を向いたまま距離を保つ（撃つ武器向き）",
 	"retreat": "相手から逃げる",
 	"push_to_pit": "相手の向こう側に回って、相手を穴へ押し込む",
-	"go_repair": "修理ステーションへ行って回復する",
+	"go_repair": "修理ステーションへ行き、着いたらそこに留まって回復する（修理ステーションに居続けるのもこれ）",
 	"circle": "相手の周りを回る",
-	"hold": "その場で相手を向いて待つ",
+	"hold": "今いる場所から動かず、相手を向いて待つ",
 }
 const BEHAVIOR_TEXT: Dictionary = {
 	"grind": "触れている間削る", "strike": "叩く", "lift": "ひっくり返す", "ram": "体当たり", "shoot": "撃つ",
 	"booster": "一時的に速くなる", "shield": "一時的に受けるダメージが減る", "repair": "HPを回復する",
 	"shockwave": "近くの相手を吹き飛ばす", "emp": "近くの相手を止める", "overclock": "一時的に与えるダメージが増える",
 }
+
+## 指示と方針の対応例。小さいモデルは例を見ると「指示の言葉を方針に置き換え、条件が合う間は続ける」ことを真似しやすい
+## （tools/llm_bench.gd の測定に使うプロンプトと同じ・似た指示は入れない。入れると答えを教えることになる）
+const EXAMPLES: String = """指示と方針の例（指示の言葉を方針に置き換え、条件は戦況の項目で確かめ、条件が合う間はその方針を続ける）：
+- 「最初は相手から離れて様子を見ろ」→ time_left が多い試合の始めは retreat
+- 「相手が動けないうちに殴れ」→ enemy.stunned が true のときは charge
+- 「相手が近づいてきたら距離をとれ」→ enemy.dist が小さいときは keep_distance、大きいときは hold
+- 「最後の10秒は全力で突っ込め」→ time_left が 10 より小さいときは charge
+- 「修理が残っているうちは修理ステーションで粘れ」→ repair.left が 0 より大きい間は go_repair"""
 
 ## 壊れた答えのとき BattleSim に渡すもの（方針が不正なので、前の方針を続けて「えっと…」と言う）
 const CONFUSED: Dictionary = {"intent": "", "skill": null, "say": ""}
@@ -144,7 +153,8 @@ func _take_result(job: HttpJob) -> void:
 
 # ---- 組み立てと読み取り（画面なしでテストできるよう static にする） ----
 
-## 変わらない部分：役目、方針の一覧、スキル、機体、戦況の見方、答えの形、プレイヤーの指示
+## 指示文：役目、方針の一覧、スキル、機体、戦況の見方、答えの形、指示と方針の対応例、プレイヤーの指示（この順）。
+## 対応例はプレイヤーの指示の直前に置く（測定で一番効いた位置。前にまとめると正答率が下がった）
 static func build_system_prompt(prompt: String, build: Dictionary, say_max: int, say_first: bool = false,
 		text_obs: bool = false) -> String:
 	var lines: PackedStringArray = PackedStringArray()
@@ -152,6 +162,23 @@ static func build_system_prompt(prompt: String, build: Dictionary, say_max: int,
 	lines.append("方針（intent）：")
 	for intent: String in RobotDriver.INTENTS:
 		lines.append("- %s：%s" % [intent, INTENT_TEXT.get(intent, intent)])
+	lines.append(_build_part(build))
+	if text_obs:
+		lines.append("戦況は短い文で毎回渡す。プレイヤーの指示の条件（HPが減ったら、相手が穴の近くなら、弾が切れたら など）が今の戦況に当てはまるかを確かめてから方針を選ぶ。")
+	else:
+		lines.append("戦況の見方：hp は残りHPの%。enemy.dist は相手との距離（3以下で接触、10以上は遠い）。dir は相手の方向。near_pit は穴の近く。behind_me は相手が自分の後ろ側。facing_me は相手がこちらを向いている。ammo は残り弾（null は撃つ武器なし）。repair.left は修理で回復できる残り。events は前回からの出来事。")
+	var shape: String = "{\"say\":\"一言\",\"intent\":\"方針\",\"skill\":番号かnull}" if say_first \
+		else "{\"intent\":\"方針\",\"skill\":番号かnull,\"say\":\"一言\"}"
+	lines.append("答えは %s の形だけ。say は操縦士として今の判断を自分の言葉で言う%d文字以内の日本語（指示の文をそのまま写さない）。" % [shape, say_max])
+	lines.append(EXAMPLES)
+	var p: String = prompt.strip_edges()
+	lines.append("プレイヤーの指示：「%s」" % (p if not p.is_empty() else "（指示なし。自分で考えて戦え）"))
+	return "\n".join(lines)
+
+
+## スキルと機体の説明
+static func _build_part(build: Dictionary) -> String:
+	var lines: PackedStringArray = PackedStringArray()
 	var skills: Array = build.get("skills", [])
 	if skills.is_empty():
 		lines.append("スキルはない。skill はいつも null。")
@@ -165,15 +192,6 @@ static func build_system_prompt(prompt: String, build: Dictionary, say_max: int,
 		weapons.append("%s（%s）" % [w.get("name", ""), BEHAVIOR_TEXT.get(w.get("behavior", ""), "")])
 	var frame: Dictionary = build.get("frame", {})
 	lines.append("自分の機体：%s。武器：%s。" % [frame.get("name", ""), "、".join(weapons) if weapons.size() > 0 else "なし"])
-	if text_obs:
-		lines.append("戦況は短い文で毎回渡す。プレイヤーの指示の条件（HPが減ったら、相手が穴の近くなら、弾が切れたら など）が今の戦況に当てはまるかを確かめてから方針を選ぶ。")
-	else:
-		lines.append("戦況の見方：hp は残りHPの%。enemy.dist は相手との距離（3以下で接触、10以上は遠い）。dir は相手の方向。near_pit は穴の近く。behind_me は相手が自分の後ろ側。facing_me は相手がこちらを向いている。ammo は残り弾（null は撃つ武器なし）。repair.left は修理で回復できる残り。events は前回からの出来事。")
-	var shape: String = "{\"say\":\"一言\",\"intent\":\"方針\",\"skill\":番号かnull}" if say_first \
-		else "{\"intent\":\"方針\",\"skill\":番号かnull,\"say\":\"一言\"}"
-	lines.append("答えは %s の形だけ。say は操縦士として今の判断を自分の言葉で言う%d文字以内の日本語（指示の文をそのまま写さない）。" % [shape, say_max])
-	var p: String = prompt.strip_edges()
-	lines.append("プレイヤーの指示：「%s」" % (p if not p.is_empty() else "（指示なし。自分で考えて戦え）"))
 	return "\n".join(lines)
 
 

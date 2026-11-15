@@ -12,8 +12,12 @@ var status: Status = Status.OFF
 var pid: int = -1
 ## 使えない理由（使えるなら空）
 var problem: String = ""
+## 先読みさせ終えた指示文（prewarm を参照）
+var warmed_prompt: String = ""
 
 var _health: HttpJob = null
+var _warm: HttpJob = null
+var _warm_text: String = ""
 var _deadline_ms: int = 0
 
 
@@ -51,6 +55,10 @@ func start() -> void:
 
 ## 起動の確認を少し進める。返すのは今の状態
 func update() -> Status:
+	if _warm != null and _warm.poll() != HttpJob.State.RUNNING:
+		if _warm.state == HttpJob.State.DONE and _warm.status_code == 200:
+			warmed_prompt = _warm_text
+		_warm = null
 	if status != Status.STARTING:
 		return status
 	if Time.get_ticks_msec() > _deadline_ms:
@@ -91,6 +99,25 @@ func stop_process() -> void:
 	if pid > 0 and OS.is_process_running(pid):
 		OS.kill(pid)
 	pid = -1
+
+
+## 指示文を先読みさせる：1トークンだけ答えさせ、その計算をサーバーに残させる。
+## このモデル（Qwen3.5）は指示文がまるごと同じときだけ計算を使い回せるので、バトルで使う指示文そのものを渡す。
+## 先読み中・同じ指示文を先読み済み・まだ使えないときは何もしない。先読みしたら true
+func prewarm(system_prompt: String) -> bool:
+	if update() != Status.READY or _warm != null or system_prompt == warmed_prompt or system_prompt.is_empty():
+		return false
+	_warm_text = system_prompt
+	var payload: Dictionary = {
+		"messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": "準備"}],
+		"max_tokens": 1,
+		"cache_prompt": true,
+		"chat_template_kwargs": {"enable_thinking": false},
+	}
+	_warm = HttpJob.new()
+	_warm.start(str(config.get_value("host")), int(config.get_value("port")), HTTPClient.METHOD_POST,
+		"/v1/chat/completions", JSON.stringify(payload), float(config.get_value("startup_timeout_sec")))
+	return true
 
 
 func _set_failed(message: String) -> void:

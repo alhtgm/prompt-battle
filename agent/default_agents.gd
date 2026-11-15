@@ -30,6 +30,16 @@ func _init(use_llm: bool = false) -> void:
 	llm_server.start()
 
 
+## 組み立て中に、バトルで使う指示文を先読みさせておく（試合開始直後の最初の答えを早める）。
+## build は BattleSim.build_summary の形。本番の頭脳を使わないときは何もしない
+func prewarm(prompt: String, build: Dictionary) -> void:
+	if llm_server == null:
+		return
+	var cfg: Variant = llm_server.config
+	llm_server.prewarm(LlmBrain.build_system_prompt(prompt, build, int(cfg.get_value("say_max_chars")),
+		bool(cfg.get_value("say_first")), str(cfg.get_value("obs_style")) == "text"))
+
+
 ## バトル1試合ぶんの頭脳を作る。player_id はその機体のプレイヤー（記録の再生なら -1。通信対戦で使う）
 func make_brain(is_human: bool, rng: Rng, _player_id: int = -1) -> RefCounted:
 	if is_human and llm_server != null and not llm_server.is_failed():
