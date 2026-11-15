@@ -19,6 +19,7 @@ var side_names: Array[Label] = []
 var side_intents: Array[Label] = []
 var side_says: Array[Label] = []
 var side_bars: Array[ProgressBar] = []
+var side_prompts: Array[Label] = []
 var log_label: Label
 var others_label: Label
 
@@ -69,6 +70,10 @@ func build_ui() -> void:
 		side_bars.append(bar)
 		side_intents.append(_label(p, "", 18, COL_TEXT))
 		side_says.append(_label(p, "", 20, Color(1.0, 0.92, 0.6)))
+		var pl: Label = _label(p, "", 14, COL_DIM)
+		pl.custom_minimum_size = Vector2(300, 0)
+		pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		side_prompts.append(pl)
 
 	# 左下：実況、右下：ほかの試合
 	var bottom_left: VBoxContainer = _panel(Control.PRESET_BOTTOM_LEFT, Vector2(16, 12), true)
@@ -77,7 +82,22 @@ func build_ui() -> void:
 	var bottom_right: VBoxContainer = _panel(Control.PRESET_BOTTOM_RIGHT, Vector2(16, 12), true)
 	_label(bottom_right, "ほかの試合", 15, COL_DIM)
 	others_label = _label(bottom_right, "", 15, COL_DIM)
+	_fill_prompts()
 	refresh()
+
+
+## プロンプトの見せ方（企画メモ「観戦」）：生き残っている間は自分のものだけ、脱落したら両方見える
+func _fill_prompts() -> void:
+	if watched_battle == null:
+		return
+	var me_alive: bool = main.session.get_player(main.HUMAN_ID).alive
+	var ids: Array = [watched_battle.a, watched_battle.b]
+	for i: int in 2:
+		var text: String = str(watched_battle.prompts[i])
+		if me_alive and ids[i] != main.HUMAN_ID:
+			side_prompts[i].text = "プロンプト：（相手のものは見えない）"
+		else:
+			side_prompts[i].text = "プロンプト：%s" % (text if not text.is_empty() else "（なし）")
 
 
 func _process(_delta: float) -> void:
@@ -111,6 +131,10 @@ func refresh() -> void:
 	var spectating: String = "（観戦中）" if not s.get_player(main.HUMAN_ID).alive else ""
 	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s倍）" % [
 		s.round_no, spectating, sim.now(), sim.time_left(), main.battle_speed]
+	if sim.over:
+		var w: int = int(sim.result["winner"])
+		header.text += "\n決着：%s（%s）　ほかの試合が終わるのを待っています" % [
+			"引き分け" if w < 0 else "%s の勝ち" % names[w], UiText.REASON_LABELS.get(sim.result["reason"], "")]
 	for i: int in 2:
 		var r: Variant = sim.robots[i]
 		var state: String = "穴に落ちた" if r.fell else ("動けない！" if r.stun > 0.0 else UiText.INTENT_LABELS.get(r.intent, r.intent))

@@ -4,6 +4,15 @@ extends "res://view/screen_base.gd"
 
 const GameData := preload("res://core/game_data.gd")
 
+## 押すとプロンプト欄に入る例（[ボタンの名前, プロンプト]）
+const PROMPT_EXAMPLES: Array = [
+	["突撃", "とにかく突撃して殴れ"],
+	["穴落とし", "相手が穴の近くに来たら穴に押し込め。それ以外は突撃しろ"],
+	["射撃", "距離をとって撃ちまくれ。弾が切れたら突っ込め"],
+	["慎重", "慎重に戦え。HPが減ったら修理に行け"],
+	["回り込み", "相手の後ろに回り込んで攻めろ"],
+]
+
 var frame_uid: int = -1
 var weapon_uids: Array[int] = []
 var skill_uids: Array[int] = []
@@ -37,6 +46,7 @@ func build_ui() -> void:
 				weapon_uids.append(part.uid)
 
 	# 左：手持ちパーツ
+	add_label("チェックを入れて機体を組む。フレームは1つ、武器とスキルはフレームの枠の数まで。", 15, COL_DIM, left)
 	var frame_group := ButtonGroup.new()
 	for kind: String in GameData.KINDS:
 		add_label(UiText.KIND_LABELS[kind], 22, COL_ACCENT, left)
@@ -57,7 +67,17 @@ func build_ui() -> void:
 	# 右：残り時間、プロンプト、出撃、体力の一覧
 	_timer = add_label("", 20, COL_ACCENT, right)
 	add_label("操縦士へのプロンプト", 22, COL_ACCENT, right)
-	add_label("例：「相手が穴の近くに来たら穴に押し込め。HPが減ったら修理に行け」", 15, COL_DIM, right)
+	add_label("操縦士はこれを読んで、試合中に自分で動き方を決める。押すと例が入る：", 15, COL_DIM, right)
+	var examples := HFlowContainer.new()
+	examples.add_theme_constant_override("h_separation", 6)
+	examples.add_theme_constant_override("v_separation", 6)
+	right.add_child(examples)
+	for ex: Array in PROMPT_EXAMPLES:
+		var b := Button.new()
+		b.text = ex[0]
+		b.tooltip_text = ex[1]
+		b.pressed.connect(set_prompt.bind(ex[1]))
+		examples.add_child(b)
 	_prompt = TextEdit.new()
 	_prompt.custom_minimum_size = Vector2(0, 110)
 	_prompt.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
