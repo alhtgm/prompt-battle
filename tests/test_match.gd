@@ -146,10 +146,10 @@ func test_damage_formula() -> void:
 	var data := _data()
 	var cfg: Dictionary = data.rules["damage"]
 	check_eq(Damage.ranks({0: 100.0, 1: 80.0, 2: 80.0, 3: 10.0}), {0: 1, 1: 2, 2: 2, 3: 4}, "同じ体力は同じ順位")
-	check_eq(Damage.loss_damage(1, 0.0, cfg), 2, "A=2、順位1、差0 → 2")
-	check_eq(Damage.loss_damage(6, 1.0, cfg), 32, "順位6、差1 → 12+20=32")
-	check_eq(Damage.loss_damage(3, 0.5, cfg), 16, "順位3、差0.5 → 6+10=16")
-	check_eq(Damage.loss_damage(2, NAN, cfg), 4, "差が壊れていても順位の分だけ")
+	check_eq(Damage.loss_damage(1, 0.0, cfg), 6, "A=6、順位1、差0 → 6")
+	check_eq(Damage.loss_damage(6, 1.0, cfg), 96, "順位6、差1 → 36+60=96")
+	check_eq(Damage.loss_damage(3, 0.5, cfg), 48, "順位3、差0.5 → 18+30=48")
+	check_eq(Damage.loss_damage(2, NAN, cfg), 12, "差が壊れていても順位の分だけ")
 	check_eq(Damage.draw_damage(4, cfg), 0, "引き分けはダメージなし（仮）")
 
 

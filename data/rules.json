@@ -109,8 +109,8 @@
     "prompt_max_chars": 120
   },
   "damage": {
-    "rank_coef": 2,
-    "margin_coef": 20,
+    "rank_coef": 6,
+    "margin_coef": 60,
     "on_draw": "none"
   },
   "match": {
