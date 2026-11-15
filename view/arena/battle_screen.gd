@@ -4,11 +4,13 @@ extends Control
 
 const UiText := preload("res://view/ui_text.gd")
 const ArenaView := preload("res://view/arena/arena_view.gd")
+const Look := preload("res://view/look.gd")
+const PostOverlay := preload("res://view/post_overlay.gd")
 
 const LOG_LINES: int = 6
-const COL_TEXT := Color(0.95, 0.95, 0.92)
-const COL_DIM := Color(0.7, 0.7, 0.68)
-const SIDE_COLORS: Array[Color] = [Color(0.45, 0.68, 1.0), Color(1.0, 0.65, 0.35)]
+const COL_TEXT := Color(0.9, 0.87, 0.8)
+const COL_DIM := Color(0.62, 0.6, 0.55)
+const SIDE_COLORS: Array[Color] = [Color(0.45, 0.78, 1.0), Color(1.0, 0.62, 0.25)]
 
 ## view/main.gd（画面の切り替え役）
 var main: Node
@@ -22,15 +24,19 @@ var side_bars: Array[ProgressBar] = []
 var side_prompts: Array[Label] = []
 var log_label: Label
 var others_label: Label
+## 機体の頭上に重ねる名前と一言
+var bubbles: Array[Label] = []
 
 
 func build_ui() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	watched_battle = _pick_battle()
 
-	# 3Dのアリーナ（自分だけの3D空間に描く）
+	# 3Dのアリーナ（自分だけの3D空間に、低い解像度で描いて拡大する）
 	var container := SubViewportContainer.new()
 	container.stretch = true
+	container.stretch_shrink = Look.PIXEL_SHRINK
+	container.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(container)
@@ -42,6 +48,15 @@ func build_ui() -> void:
 	arena.setup(main.data)
 	if watched_battle != null:
 		arena.bind(watched_battle.sim)
+	# アリーナだけに強い画面効果（ざらつき・色の段数・周辺の暗さ）をかける。文字の板はこの上に出す
+	var post := PostOverlay.new()
+	add_child(post)
+	post.setup(Look.ARENA_POST)
+	for i: int in 2:
+		var b: Label = _label(self, "", 17, SIDE_COLORS[i])
+		b.add_theme_constant_override("outline_size", 6)
+		b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		bubbles.append(b)
 
 	# 上：見出しと操作
 	var top: VBoxContainer = _panel(Control.PRESET_CENTER_TOP, Vector2(0, 12), false)
@@ -103,6 +118,22 @@ func _fill_prompts() -> void:
 func _process(_delta: float) -> void:
 	if main != null and main.session != null and main.session.phase == "battle":
 		refresh()
+		_place_bubbles()
+
+
+## 頭上の文字を、3Dの機体の位置に合わせて置く（低い解像度で描いているので、その倍率を掛ける）
+func _place_bubbles() -> void:
+	if watched_battle == null or arena.robot_views.is_empty():
+		return
+	for i: int in 2:
+		var view: Node3D = arena.robot_views[i]
+		var b: Label = bubbles[i]
+		var p: Vector3 = view.label_position()
+		b.visible = not arena.camera.is_position_behind(p) and view.visible
+		b.text = view.label.text
+		b.reset_size()
+		var at: Vector2 = arena.camera.unproject_position(p) * float(Look.PIXEL_SHRINK)
+		b.position = at - Vector2(b.size.x * 0.5, b.size.y)
 
 
 func set_speed(x: float) -> void:
@@ -168,9 +199,10 @@ func _panel(preset: int, margin: Vector2, backed: bool) -> VBoxContainer:
 	if backed:
 		var panel := PanelContainer.new()
 		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0, 0, 0, 0.55)
+		style.bg_color = Look.UI_PANEL
+		style.border_color = Look.UI_BORDER
+		style.set_border_width_all(1)
 		style.set_content_margin_all(10)
-		style.set_corner_radius_all(6)
 		panel.add_theme_stylebox_override("panel", style)
 		holder = panel
 	else:
