@@ -9,7 +9,7 @@ const TitleScreen := preload("res://view/title/title_screen.gd")
 const DraftScreen := preload("res://view/draft/draft_screen.gd")
 const LootScreen := preload("res://view/draft/loot_screen.gd")
 const GarageScreen := preload("res://view/garage/garage_screen.gd")
-const BattleTextScreen := preload("res://view/arena/battle_text_screen.gd")
+const BattleScreen := preload("res://view/arena/battle_screen.gd")
 const RoundResultScreen := preload("res://view/results/round_result_screen.gd")
 const FinalScreen := preload("res://view/results/final_screen.gd")
 
@@ -82,7 +82,7 @@ func _sync_screen() -> void:
 	match session.phase:
 		MatchSession.PHASE_DRAFT: _show(DraftScreen.new())
 		MatchSession.PHASE_BUILD: _show(GarageScreen.new())
-		MatchSession.PHASE_BATTLE: _show(BattleTextScreen.new())
+		MatchSession.PHASE_BATTLE: _show(BattleScreen.new())
 		MatchSession.PHASE_ROUND_RESULT: _show(RoundResultScreen.new())
 		MatchSession.PHASE_LOOT: _show(LootScreen.new())
 		MatchSession.PHASE_FINISHED: _show(FinalScreen.new())
