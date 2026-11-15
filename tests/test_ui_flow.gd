@@ -7,12 +7,13 @@ const TitleScreen := preload("res://view/title/title_screen.gd")
 const DraftScreen := preload("res://view/draft/draft_screen.gd")
 const LootScreen := preload("res://view/draft/loot_screen.gd")
 const GarageScreen := preload("res://view/garage/garage_screen.gd")
-const BattleTextScreen := preload("res://view/arena/battle_text_screen.gd")
+const BattleScreen := preload("res://view/arena/battle_screen.gd")
+const UiText := preload("res://view/ui_text.gd")
 const RoundResultScreen := preload("res://view/results/round_result_screen.gd")
 const FinalScreen := preload("res://view/results/final_screen.gd")
 
 const PHASE_SCREENS: Dictionary = {
-	"draft": DraftScreen, "build": GarageScreen, "battle": BattleTextScreen,
+	"draft": DraftScreen, "build": GarageScreen, "battle": BattleScreen,
 	"round_result": RoundResultScreen, "loot": LootScreen, "finished": FinalScreen,
 }
 
@@ -23,6 +24,29 @@ func _frame() -> void:
 
 func _is(screen: Node, script: GDScript) -> bool:
 	return screen != null and screen.get_script() == script
+
+
+## 段階5の完成の目安：自分の試合を3Dで観戦でき、操縦士の今の方針と一言が見える
+func _check_battle_screen(b: Node, main: Node) -> void:
+	var r: int = main.session.round_no
+	check(b.header.text.contains("ラウンド %d" % r), "ラウンド %d：バトル画面にラウンドが出る" % r)
+	var me_alive: bool = main.session.get_player(0).alive
+	var mine: Variant = main.session.battle_of(0)
+	if me_alive:
+		check(b.watched_battle == mine, "ラウンド %d：自分の試合を映している" % r)
+	var sim: Variant = b.watched_battle.sim
+	for i: int in 2:
+		var robot: Variant = sim.robots[i]
+		var view: Node3D = b.arena.robot_views[i]
+		check(view.position.distance_to(Vector3(robot.x, view.position.y, robot.z)) < 0.01,
+			"ラウンド %d：3Dの機体 %d が計算上の位置にいる" % [r, i])
+		if not robot.fell and robot.stun <= 0.0:
+			var intent_label: String = UiText.INTENT_LABELS[robot.intent]
+			check(b.side_intents[i].text.contains(intent_label), "ラウンド %d：機体 %d の方針「%s」が見える" % [r, i, intent_label])
+		if not robot.say.is_empty():
+			check(b.side_says[i].text.contains(robot.say), "ラウンド %d：機体 %d の一言が見える" % [r, i])
+			check(view.label.text.contains(robot.say), "ラウンド %d：機体 %d の頭上に一言が出る" % [r, i])
+	check(b.arena.camera.current, "ラウンド %d：アリーナのカメラが使われている" % r)
 
 
 func test_play_through_from_title_to_final_ranking() -> void:
@@ -71,8 +95,9 @@ func test_play_through_from_title_to_final_ranking() -> void:
 			MatchSession.PHASE_BATTLE:
 				var b: Node = main.screen
 				main.session.update(3.0)
-				b._refresh()
-				check(b._header.text.contains("ラウンド %d" % main.session.round_no), "バトル画面にラウンドが出る")
+				await _frame()
+				b.refresh()
+				_check_battle_screen(b, main)
 				b.skip()
 			MatchSession.PHASE_ROUND_RESULT:
 				main.screen.next()
