@@ -3,11 +3,12 @@
 extends MarginContainer
 
 const UiText := preload("res://view/ui_text.gd")
+const Look := preload("res://view/look.gd")
 
-const COL_TEXT := Color(0.92, 0.92, 0.9)
-const COL_DIM := Color(0.62, 0.62, 0.6)
-const COL_ACCENT := Color(1.0, 0.85, 0.4)
-const COL_BAD := Color(1.0, 0.45, 0.4)
+const COL_TEXT := Look.UI_TEXT
+const COL_DIM := Color(0.55, 0.53, 0.48)
+const COL_ACCENT := Look.UI_ACCENT
+const COL_BAD := Color(0.95, 0.38, 0.3)
 
 ## view/main.gd（画面の切り替え役）
 var main: Node

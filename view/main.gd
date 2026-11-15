@@ -12,10 +12,11 @@ const GarageScreen := preload("res://view/garage/garage_screen.gd")
 const BattleScreen := preload("res://view/arena/battle_screen.gd")
 const RoundResultScreen := preload("res://view/results/round_result_screen.gd")
 const FinalScreen := preload("res://view/results/final_screen.gd")
+const Look := preload("res://view/look.gd")
+const PostOverlay := preload("res://view/post_overlay.gd")
 
 ## 人間のプレイヤーのID
 const HUMAN_ID: int = 0
-const COL_BG := Color(0.08, 0.08, 0.09)
 
 var data: GameData
 var session: MatchSession = null
@@ -33,16 +34,58 @@ var _shown_round: int = -1
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	theme = make_theme()
 	var bg := ColorRect.new()
-	bg.color = COL_BG
+	bg.color = Look.UI_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	# 画面全体（メニューを含む）に薄いざらつきと周辺の暗さを重ねる
+	var layer := CanvasLayer.new()
+	layer.layer = 10
+	add_child(layer)
+	var post := PostOverlay.new()
+	layer.add_child(post)
+	post.setup(Look.SCREEN_POST)
 	data = GameData.new()
 	if not data.load_dir():
 		push_error("data/ が読めない：\n" + "\n".join(data.errors))
 		return
 	agents = DefaultAgents.new(use_llm)
 	show_title()
+
+
+## すべての画面に使う見た目（暗い板、鈍い金色の枠、くすんだ文字）
+static func make_theme() -> Theme:
+	var t := Theme.new()
+	t.default_font_size = 18
+	t.set_color("font_color", "Label", Look.UI_TEXT)
+	for cls: String in ["Button", "CheckBox"]:
+		t.set_color("font_color", cls, Look.UI_TEXT)
+		t.set_color("font_hover_color", cls, Look.UI_ACCENT)
+		t.set_color("font_pressed_color", cls, Look.UI_ACCENT)
+		t.set_color("font_focus_color", cls, Look.UI_TEXT)
+		t.set_color("font_disabled_color", cls, Color(0.4, 0.38, 0.35))
+	t.set_stylebox("normal", "Button", _box(Color(0.11, 0.1, 0.09), Look.UI_BORDER))
+	t.set_stylebox("hover", "Button", _box(Color(0.15, 0.13, 0.1), Look.UI_ACCENT))
+	t.set_stylebox("pressed", "Button", _box(Color(0.07, 0.065, 0.06), Look.UI_ACCENT))
+	t.set_stylebox("focus", "Button", _box(Color(0, 0, 0, 0), Look.UI_ACCENT.darkened(0.3)))
+	t.set_stylebox("disabled", "Button", _box(Color(0.08, 0.08, 0.075), Color(0.25, 0.22, 0.18)))
+	t.set_stylebox("normal", "TextEdit", _box(Color(0.03, 0.03, 0.03), Look.UI_BORDER))
+	t.set_stylebox("focus", "TextEdit", _box(Color(0.03, 0.03, 0.03), Look.UI_ACCENT))
+	t.set_color("font_color", "TextEdit", Look.UI_TEXT)
+	t.set_color("caret_color", "TextEdit", Look.UI_ACCENT)
+	t.set_stylebox("background", "ProgressBar", _box(Color(0.05, 0.05, 0.05), Color(0.2, 0.18, 0.15)))
+	t.set_stylebox("fill", "ProgressBar", _box(Look.UI_ACCENT.darkened(0.15), Color(0, 0, 0, 0)))
+	return t
+
+
+static func _box(bg: Color, border: Color) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border
+	s.set_border_width_all(1 if border.a > 0.0 else 0)
+	s.set_content_margin_all(6)
+	return s
 
 
 ## ウィンドウを閉じたときや画面を外したときに、裏のサーバーを止める
