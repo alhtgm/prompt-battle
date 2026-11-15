@@ -31,6 +31,8 @@ class Battle:
 	var b: int = 0
 	## 記録の再生のとき、元になった脱落者のID
 	var ghost_of: int = -1
+	## 両者のプロンプト（観戦で見せるかどうかは画面が決める）
+	var prompts: Array = ["", ""]
 	var sim: BattleSim
 
 
@@ -355,6 +357,7 @@ func _add_battle(a: int, b: int) -> void:
 	var brains: Array = []
 	for side: int in 2:
 		brains.append(_agents.make_brain(humans[side], _rng.fork("round/%d/brain/%d/%d" % [round_no, k, side])))
+	bt.prompts = prompts.duplicate()
 	bt.sim = BattleSim.new(data, builds, brains, prompts, names, _rng.fork("round/%d/battle/%d" % [round_no, k]))
 	battles.append(bt)
 

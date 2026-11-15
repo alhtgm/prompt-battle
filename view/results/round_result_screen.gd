@@ -8,6 +8,7 @@ func build_ui() -> void:
 	var s: Variant = session()
 	var h: Dictionary = s.history[s.history.size() - 1]
 	add_title("ラウンド %d の結果" % h["round"])
+	_add_my_headline(h)
 	for e: Dictionary in h["battles"]:
 		var a: String = _name(int(e["a"]), -1)
 		var b: String = _name(int(e["b"]), int(e["ghost_of"]))
@@ -28,6 +29,32 @@ func build_ui() -> void:
 	if not me().alive:
 		add_label("あなたは脱落した。最後まで観戦できる。", 18, COL_DIM)
 	add_button("次へ", next)
+
+
+## 自分の試合の結果を一番上に大きく出す（自分が戦っていなければ出さない）
+func _add_my_headline(h: Dictionary) -> void:
+	var id: int = main.HUMAN_ID
+	for e: Dictionary in h["battles"]:
+		if int(e["a"]) != id and int(e["b"]) != id:
+			continue
+		var w: int = int(e["winner"])
+		var dmg: int = int(h["damage"].get(id, 0))
+		var text: String
+		var col: Color
+		if w == id:
+			text = "あなたの勝ち！"
+			col = COL_ACCENT
+		elif w == -2:
+			text = "引き分け"
+			col = COL_TEXT
+		else:
+			text = "あなたの負け…　体力 −%d" % dmg
+			col = COL_BAD
+		if h["eliminated"].has(id):
+			text += "　脱落（%d位）" % me().place
+		add_label(text, 28, col)
+		add_label(" ", 6)
+		return
 
 
 func next() -> void:

@@ -13,7 +13,12 @@ func build_ui() -> void:
 		var when: String = "最後まで生存" if p.alive else "ラウンド %d で脱落" % p.eliminated_round
 		add_label("%d位　%s　（%s）" % [p.place, p.name, when], 24 if p.place == 1 else 20, col)
 	add_label(" ")
+	add_button("もう一度遊ぶ", play_again)
 	add_button("タイトルへ", to_title)
+
+
+func play_again() -> void:
+	main.start_game()
 
 
 func to_title() -> void:

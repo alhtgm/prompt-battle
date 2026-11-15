@@ -47,6 +47,15 @@ func _check_battle_screen(b: Node, main: Node) -> void:
 			check(b.side_says[i].text.contains(robot.say), "ラウンド %d：機体 %d の一言が見える" % [r, i])
 			check(view.label.text.contains(robot.say), "ラウンド %d：機体 %d の頭上に一言が出る" % [r, i])
 	check(b.arena.camera.current, "ラウンド %d：アリーナのカメラが使われている" % r)
+	# プロンプトの見せ方：生き残っている間は自分のものだけ、脱落したら両方
+	var ids: Array = [b.watched_battle.a, b.watched_battle.b]
+	for i: int in 2:
+		var p: String = str(b.watched_battle.prompts[i])
+		var shown: bool = not p.is_empty() and b.side_prompts[i].text.contains(p)
+		if not me_alive or ids[i] == 0:
+			check(p.is_empty() or shown, "ラウンド %d：見てよいプロンプト（機体 %d）が見える" % [r, i])
+		else:
+			check(not shown, "ラウンド %d：生き残っている間は相手のプロンプトが見えない" % r)
 
 
 func test_play_through_from_title_to_final_ranking() -> void:
@@ -113,6 +122,25 @@ func test_play_through_from_title_to_final_ranking() -> void:
 		check(visited.has(phase), "段階 %s を通った" % phase)
 	check(_is(main.screen, FinalScreen), "最後は最終順位の画面")
 	check(me.place >= 1 and me.place <= 6, "自分の順位が決まる（%d位）" % me.place)
+	main.screen.play_again()
+	await _frame()
+	check(_is(main.screen, DraftScreen) and main.session.round_no == 0, "もう一度遊ぶと新しい試合のパーツ選びから")
+	main.show_title()
+	await _frame()
+	check(_is(main.screen, TitleScreen), "タイトルに戻れる")
+	main.start_game(1)
+	await _frame()
+	for k: int in 60:  # 2試合目は操作せず締め切りだけで最後まで進める
+		if main.session.is_finished():
+			break
+		match main.session.phase:
+			"draft": main.session.finish_draft()
+			"build": main.session.finish_build()
+			"battle": main.session.run_battles_to_end()
+			"round_result": main.session.finish_round_result()
+			"loot": main.session.finish_loot()
+		await _frame()
+	check(_is(main.screen, FinalScreen), "2試合目も最終順位まで進む")
 	main.screen.to_title()
 	await _frame()
 	check(_is(main.screen, TitleScreen), "タイトルへ戻れる")
