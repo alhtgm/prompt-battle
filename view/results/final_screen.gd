@@ -9,12 +9,16 @@ func build_ui() -> void:
 	var order: Array = s.players.duplicate()
 	order.sort_custom(func(x: Variant, y: Variant) -> bool: return x.place < y.place)
 	for p: Variant in order:
-		var col: Color = COL_ACCENT if p.id == main.HUMAN_ID else COL_TEXT
+		var col: Color = COL_ACCENT if p.id == main.human_id else COL_TEXT
 		var when: String = "最後まで生存" if p.alive else "ラウンド %d で脱落" % p.eliminated_round
 		add_label("%d位　%s　（%s）" % [p.place, p.name, when], 24 if p.place == 1 else 20, col)
 	add_label(" ")
-	add_button("もう一度遊ぶ", play_again)
-	add_button("タイトルへ", to_title)
+	if s.is_online():
+		add_label("まもなく待合室に戻ります", 18, COL_DIM)
+		add_button("抜けてタイトルへ", to_title)
+	else:
+		add_button("もう一度遊ぶ", play_again)
+		add_button("タイトルへ", to_title)
 
 
 func play_again() -> void:

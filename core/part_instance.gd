@@ -15,6 +15,18 @@ func get_stat(stat_name: String, fallback: float = 0.0) -> float:
 	return stats.get(stat_name, fallback)
 
 
+## to_dict() の辞書から作り直す（通信で受け取ったとき）
+static func from_dict(d: Dictionary) -> RefCounted:
+	var p: RefCounted = (load("res://core/part_instance.gd") as GDScript).new()
+	p.uid = int(d.get("uid", 0))
+	p.def_id = str(d.get("def_id", ""))
+	p.kind = str(d.get("kind", ""))
+	var s: Dictionary = d.get("stats", {})
+	for k: Variant in s:
+		p.stats[str(k)] = float(s[k])
+	return p
+
+
 ## 比較・保存用の辞書（ステータスは名前順）
 func to_dict() -> Dictionary:
 	var names: Array[String] = []

@@ -14,7 +14,7 @@ func build_ui() -> void:
 		var b: String = _name(int(e["b"]), int(e["ghost_of"]))
 		var w: int = int(e["winner"])
 		var who: String = "引き分け" if w == -2 else "%s の勝ち" % (a if w == int(e["a"]) else b)
-		var involved: bool = int(e["a"]) == main.HUMAN_ID or int(e["b"]) == main.HUMAN_ID
+		var involved: bool = int(e["a"]) == main.human_id or int(e["b"]) == main.human_id
 		add_label("%s vs %s → %s（%s、%.0f秒）" % [a, b, who, UiText.REASON_LABELS.get(e["reason"], ""), e["time"]],
 			20, COL_ACCENT if involved else COL_TEXT)
 	add_label(" ")
@@ -28,12 +28,23 @@ func build_ui() -> void:
 	add_standings()
 	if not me().alive:
 		add_label("あなたは脱落した。最後まで観戦できる。", 18, COL_DIM)
-	add_button("次へ", next)
+	if s.is_online():
+		_countdown = add_label("", 18, COL_DIM)  # 通信対戦では、サーバーが少し待ってから次へ進める
+	else:
+		add_button("次へ", next)
+
+
+var _countdown: Label = null
+
+
+func _process(_delta: float) -> void:
+	if _countdown != null and main.session != null:
+		_countdown.text = "%d 秒後に次へ進みます" % ceili(session().phase_time_left)
 
 
 ## 自分の試合の結果を一番上に大きく出す（自分が戦っていなければ出さない）
 func _add_my_headline(h: Dictionary) -> void:
-	var id: int = main.HUMAN_ID
+	var id: int = main.human_id
 	for e: Dictionary in h["battles"]:
 		if int(e["a"]) != id and int(e["b"]) != id:
 			continue

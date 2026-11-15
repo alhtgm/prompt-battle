@@ -18,8 +18,13 @@ func build_ui() -> void:
 	for line: String in HOW_TO_PLAY:
 		add_label(line, 18)
 	add_label(" ", 8)
-	add_button("はじめる", start)
+	add_button("はじめる（ひとりでCPUと）", start)
+	add_button("オンラインで遊ぶ", open_online)
 	add_button("観戦画面（開発用）", open_debug_viewer)
+
+
+func open_online() -> void:
+	main.open_online()
 
 
 func start() -> void:

@@ -14,12 +14,20 @@ const RoundResultScreen := preload("res://view/results/round_result_screen.gd")
 const FinalScreen := preload("res://view/results/final_screen.gd")
 const Look := preload("res://view/look.gd")
 const PostOverlay := preload("res://view/post_overlay.gd")
+const GameClient := preload("res://net/game_client.gd")
+const OnlineScreen := preload("res://view/online/online_screen.gd")
 
-## 人間のプレイヤーのID
+## ひとりで遊ぶときの、人間のプレイヤーのID
 const HUMAN_ID: int = 0
 
 var data: GameData
-var session: MatchSession = null
+## 試合。ひとりで遊ぶときは MatchSession、通信対戦では写し（net/remote_session.gd）
+var session: RefCounted = null
+## 自分のプレイヤーID（通信対戦ではサーバーが決める）
+var human_id: int = HUMAN_ID
+## 通信対戦のクライアント（ひとりで遊ぶときは null）
+var online: GameClient = null
+var _server_pid: int = -1
 ## 今出している画面
 var screen: Control = null
 ## バトルを進める速さ（画面の「4倍」ボタン）
@@ -93,12 +101,57 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE or what == NOTIFICATION_EXIT_TREE:
 		if agents != null:
 			agents.shutdown()
+		leave_online()
 
 
 func show_title() -> void:
+	leave_online()
 	session = null
 	_shown_phase = ""
 	_show(TitleScreen.new())
+
+
+## 通信対戦の画面（つなぐ・待合室）を出す
+func open_online() -> void:
+	_show(OnlineScreen.new())
+
+
+## 通信対戦につなぐ。host_server なら、このPCで画面なしのサーバーを裏で起動してから自分もつなぐ。問題があれば理由を返す
+func start_online(host: String, port: int, player_name: String, host_server: bool) -> String:
+	leave_online()
+	if host_server:
+		var args: PackedStringArray = ["--headless", "--path", ProjectSettings.globalize_path("res://"),
+			"res://net/server_main.tscn", "--", "--port=%d" % port]
+		_server_pid = OS.create_process(OS.get_executable_path(), args, false)
+		if _server_pid <= 0:
+			return "サーバーを起動できない"
+		host = "127.0.0.1"
+	online = GameClient.new()
+	online.name = "GameClient"
+	add_child(online)
+	if online.connect_to(data, agents, host, port, player_name) != OK:
+		return online.reason
+	return ""
+
+
+## 通信対戦を抜ける（自分で立てたサーバーも止める）
+func leave_online() -> void:
+	if online != null:
+		if is_instance_valid(online):
+			online.close()
+			online.queue_free()
+		online = null
+	if _server_pid > 0:
+		if OS.is_process_running(_server_pid):
+			OS.kill(_server_pid)
+		_server_pid = -1
+	human_id = HUMAN_ID
+	if session != null and session.is_online():
+		session = null
+
+
+func is_hosting() -> bool:
+	return _server_pid > 0
 
 
 ## 新しい試合を始める。seed_value が 0 なら時刻から種を作る
@@ -115,9 +168,21 @@ func start_game(seed_value: int = 0) -> void:
 
 
 func _process(delta: float) -> void:
+	if online != null:
+		# 通信対戦：試合の写しが届いていれば試合として扱う。待合室に戻ったら待合室の画面へ
+		if online.session != session:
+			session = online.session
+			_shown_phase = ""
+		if session == null:
+			if screen == null or screen.get_script() != OnlineScreen:
+				_show(OnlineScreen.new())
+			return
+		human_id = session.my_id
 	if session == null:
 		return
-	var me: Variant = session.get_player(HUMAN_ID)
+	var me: Variant = session.get_player(human_id)
+	if me == null:
+		return
 	if not me.alive:  # 脱落したら自分の操作はないので、そのまま進める
 		if session.phase == MatchSession.PHASE_BUILD:
 			session.finish_build()

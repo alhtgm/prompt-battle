@@ -30,8 +30,8 @@ func _init(use_llm: bool = false) -> void:
 	llm_server.start()
 
 
-## バトル1試合ぶんの頭脳を作る
-func make_brain(is_human: bool, rng: Rng) -> RefCounted:
+## バトル1試合ぶんの頭脳を作る。player_id はその機体のプレイヤー（記録の再生なら -1。通信対戦で使う）
+func make_brain(is_human: bool, rng: Rng, _player_id: int = -1) -> RefCounted:
 	if is_human and llm_server != null and not llm_server.is_failed():
 		return LlmBrain.new(llm_server, MockBrain.new(rng))
 	return MockBrain.new(rng)

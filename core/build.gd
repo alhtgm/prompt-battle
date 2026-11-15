@@ -48,6 +48,18 @@ func part_def_ids() -> Array[String]:
 	return out
 
 
+## to_dict() の辞書から作り直す（通信で受け取ったとき）
+static func from_dict(d: Dictionary) -> RefCounted:
+	var b: RefCounted = (load("res://core/build.gd") as GDScript).new()
+	if d.get("frame") is Dictionary:
+		b.frame = PartInstance.from_dict(d["frame"])
+	for w: Variant in d.get("weapons", []):
+		b.weapons.append(PartInstance.from_dict(w))
+	for s: Variant in d.get("skills", []):
+		b.skills.append(PartInstance.from_dict(s))
+	return b
+
+
 func to_dict() -> Dictionary:
 	var w: Array = []
 	for p: PartInstance in weapons:

@@ -23,9 +23,10 @@ func build_ui() -> void:
 
 ## パークを選んで次のラウンドへ。問題があれば理由を返す
 func pick(perk_id: String) -> String:
-	var err: String = session().choose_perk(main.HUMAN_ID, perk_id)
+	var err: String = session().choose_perk(main.human_id, perk_id)
 	if not err.is_empty():
 		_message.text = err
 		return err
+	show_waiting(_message, "%s を選びました。ほかのプレイヤーを待っています" % main.data.get_perk(perk_id).name)
 	session().finish_loot()
 	return ""

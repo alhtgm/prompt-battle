@@ -89,7 +89,7 @@ func _add_environment() -> void:
 
 
 func _add_lights(half: float) -> void:
-	# 真上に吊った電球（影を落とす）。電球そのものも見せる
+	# 真上に吊った電球（影を落とす）。電球はカメラより低い位置にあって映り込むので、光だけにする
 	var lamp := SpotLight3D.new()
 	lamp.position = Vector3(0, Look.LAMP_HEIGHT, 0)
 	lamp.rotation_degrees = Vector3(-90, 0, 0)
@@ -100,14 +100,6 @@ func _add_lights(half: float) -> void:
 	lamp.spot_attenuation = 0.6
 	lamp.shadow_enabled = true
 	add_child(lamp)
-	var bulb := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.35
-	sphere.height = 0.7
-	bulb.mesh = sphere
-	bulb.material_override = _glow_mat(Look.LAMP_COLOR)
-	bulb.position = Vector3(0, Look.LAMP_HEIGHT - 0.4, 0)
-	add_child(bulb)
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-35, 140, 0)
 	fill.light_color = Look.FILL_COLOR

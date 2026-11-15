@@ -29,6 +29,7 @@ func _initialize() -> void:
 
 
 func _run_all() -> void:
+	await process_frame  # ゲームの木が動き出してから始める（ノードを足すテストのため）
 	var counter := ErrorCounter.new()
 	OS.add_logger(counter)
 

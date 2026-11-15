@@ -66,6 +66,7 @@ func build_ui() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 8)
 	top.add_child(row)
+	row.visible = not main.session.is_online()  # 通信対戦では、速さはサーバーが決める
 	for spec: Array in [["1倍", set_speed.bind(1.0)], ["4倍", set_speed.bind(4.0)], ["最後まで飛ばす", skip]]:
 		var b := Button.new()
 		b.text = spec[0]
@@ -105,11 +106,11 @@ func build_ui() -> void:
 func _fill_prompts() -> void:
 	if watched_battle == null:
 		return
-	var me_alive: bool = main.session.get_player(main.HUMAN_ID).alive
+	var me_alive: bool = main.session.get_player(main.human_id).alive
 	var ids: Array = [watched_battle.a, watched_battle.b]
 	for i: int in 2:
 		var text: String = str(watched_battle.prompts[i])
-		if me_alive and ids[i] != main.HUMAN_ID:
+		if me_alive and ids[i] != main.human_id:
 			side_prompts[i].text = "プロンプト：（相手のものは見えない）"
 		else:
 			side_prompts[i].text = "プロンプト：%s" % (text if not text.is_empty() else "（なし）")
@@ -148,7 +149,7 @@ func skip() -> void:
 ## 見る試合：自分の試合、自分がいなければ最初の試合
 func _pick_battle() -> Variant:
 	var s: Variant = main.session
-	var b: Variant = s.battle_of(main.HUMAN_ID)
+	var b: Variant = s.battle_of(main.human_id)
 	return b if b != null else (s.battles[0] if not s.battles.is_empty() else null)
 
 
@@ -159,12 +160,12 @@ func refresh() -> void:
 	var s: Variant = main.session
 	var sim: Variant = watched_battle.sim
 	var names: Array = [sim.robots[0].name, sim.robots[1].name]
-	var spectating: String = "（観戦中）" if not s.get_player(main.HUMAN_ID).alive else ""
+	var spectating: String = "（観戦中）" if not s.get_player(main.human_id).alive else ""
 	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s倍）\n%s" % [
 		s.round_no, spectating, sim.now(), sim.time_left(), main.battle_speed, main.agents.brain_status_text()]
 	if sim.over:
 		var w: int = int(sim.result["winner"])
-		header.text += "\n決着：%s（%s）　ほかの試合が終わるのを待っています" % [
+		header.text += "\n決着：%s（%s）・ほかの試合を待っています" % [
 			"引き分け" if w < 0 else "%s の勝ち" % names[w], UiText.REASON_LABELS.get(sim.result["reason"], "")]
 	for i: int in 2:
 		var r: Variant = sim.robots[i]

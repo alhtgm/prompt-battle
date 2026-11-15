@@ -136,10 +136,11 @@ func set_prompt(text: String) -> void:
 
 ## 機体とプロンプトを試合に伝えて出撃する。問題があれば理由を返す
 func confirm() -> String:
-	var err: String = session().submit_build(main.HUMAN_ID, frame_uid, weapon_uids, skill_uids, _prompt.text)
+	var err: String = session().submit_build(main.human_id, frame_uid, weapon_uids, skill_uids, _prompt.text)
 	if not err.is_empty():
 		_message.text = err
 		return err
+	show_waiting(_message, "出撃準備OK。ほかのプレイヤーを待っています（直して押し直してもよい）")
 	session().finish_build()
 	return ""
 

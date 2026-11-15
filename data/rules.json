@@ -13,7 +13,8 @@
     "damage.on_draw": "バトルが引き分けのとき。none は両者ダメージなし、rank_only は両者に順位の分だけ",
     "match.max_rounds": "試合が終わらないときの安全装置。このラウンド数で打ち切り、残り体力の順で順位を決める",
     "match.pairing_attempts": "直前の相手と当たらない組み合わせを探す回数",
-    "agent.cpu": "CPUの組み立て。フレームは HP×速さ×(1+frame_slot_weight×枠の数) に ±frame_whim の気まぐれ。パーツは抽選の良さに 0〜part_whim の気まぐれ",
+    "online": "通信対戦。port は待ち受ける番号。*_sec はサーバーが段階を締め切るまでの時間（全員が操作し終えたらすぐ進む）。state_send_hz は試合の状態、frame_send_hz はバトルの動きを送る回数（毎秒）。frame_log_entries は1回に送る実況の数",
+    "agent.cpu":"CPUの組み立て。フレームは HP×速さ×(1+frame_slot_weight×枠の数) に ±frame_whim の気まぐれ。パーツは抽選の良さに 0〜part_whim の気まぐれ",
     "agent.mock": "仮の頭脳が方針とスキルを選ぶときのしきい値。hp は % 、dist は距離"
   },
   "players": 6,
@@ -116,6 +117,16 @@
   "match": {
     "max_rounds": 40,
     "pairing_attempts": 50
+  },
+  "online": {
+    "port": 7350,
+    "draft_time_limit_sec": 30,
+    "result_view_sec": 8,
+    "perk_time_limit_sec": 20,
+    "final_view_sec": 30,
+    "state_send_hz": 5,
+    "frame_send_hz": 20,
+    "frame_log_entries": 12
   },
   "draft": {
     "choices_per_kind": 5,

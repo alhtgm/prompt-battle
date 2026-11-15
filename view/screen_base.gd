@@ -38,7 +38,7 @@ func session() -> RefCounted:
 
 
 func me() -> RefCounted:
-	return main.session.get_player(main.HUMAN_ID)
+	return main.session.get_player(main.human_id)
 
 
 func add_title(text: String) -> Label:
@@ -73,6 +73,13 @@ func add_row() -> HBoxContainer:
 	return row
 
 
+## 通信対戦で操作を送ったあと、ほかの人を待っていることを伝える（ひとりで遊ぶときは何もしない）
+func show_waiting(label: Label, text: String = "決定しました。ほかのプレイヤーを待っています") -> void:
+	if session().is_online():
+		label.text = text
+		label.add_theme_color_override("font_color", COL_DIM)
+
+
 ## 左右2列を作る。返すのは [左, 右] の縦並び
 func add_columns(left_ratio: float = 1.4) -> Array[VBoxContainer]:
 	var row := add_row()
@@ -92,5 +99,5 @@ func add_columns(left_ratio: float = 1.4) -> Array[VBoxContainer]:
 func add_standings(parent: Control = null) -> void:
 	for p: Variant in session().standings():
 		var status: String = "%d位" % p.place if p.place > 0 else "生存"
-		var col: Color = COL_ACCENT if p.id == main.HUMAN_ID else (COL_TEXT if p.alive else COL_DIM)
+		var col: Color = COL_ACCENT if p.id == main.human_id else (COL_TEXT if p.alive else COL_DIM)
 		add_label("%s　体力 %d　%s　パーク %d個" % [p.name, roundi(p.health), status, p.perks.size()], 16, col, parent)
