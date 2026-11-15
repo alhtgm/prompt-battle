@@ -14,6 +14,49 @@ const REQUIRED_STATS: Dictionary = {
 	KIND_SKILL: [],
 }
 
+## 種類ごとに必ず持つ固定値（抽選しない値）
+const REQUIRED_FIXED: Dictionary = {
+	KIND_FRAME: ["mass", "turn_rate_deg"],
+	KIND_WEAPON: ["cooldown_sec", "arc_deg"],
+	KIND_SKILL: ["cooldown_sec", "charges"],
+}
+
+## 武器とスキルの動き方と、それぞれに要るステータス・固定値
+const BEHAVIORS: Dictionary = {
+	KIND_WEAPON: {
+		"grind": {"stats": [], "fixed": ["reach"]},
+		"strike": {"stats": [], "fixed": ["reach"]},
+		"lift": {"stats": [], "fixed": ["reach", "stun_sec"]},
+		"ram": {"stats": [], "fixed": ["reach", "min_speed"]},
+		"shoot": {"stats": [], "fixed": ["range", "ammo", "projectile_speed", "spread_deg"]},
+	},
+	KIND_SKILL: {
+		"booster": {"stats": ["speed_mult"], "fixed": ["duration_sec"]},
+		"shield": {"stats": ["damage_cut"], "fixed": ["duration_sec"]},
+		"repair": {"stats": ["heal"], "fixed": []},
+		"shockwave": {"stats": ["knockback"], "fixed": ["range"]},
+		"emp": {"stats": ["stun_sec"], "fixed": ["range"]},
+		"overclock": {"stats": ["damage_mult"], "fixed": ["duration_sec"]},
+	},
+}
+
+## rules.json のうち、0 以上の数値が並ぶまとまり（バトルの物理や頭脳のしきい値）
+const NUMBER_GROUPS: Dictionary = {
+	"battle.robot": ["radius", "base_speed", "accel", "reverse_mult", "stun_friction",
+		"sharp_turn_deg", "sharp_turn_throttle", "arrive_dist"],
+	"battle.pit": ["fall_margin", "avoid_extra", "avoid_push", "avoid_slide", "near_dist"],
+	"battle.repair": ["total_per_robot", "rate_per_sec", "max_speed"],
+	"battle.collision": ["restitution", "ram_min_speed", "ram_damage_coef", "ram_cooldown_sec"],
+	"battle.hit": ["damage_scale", "back_angle_deg", "back_mult"],
+	"battle.replan": ["big_hit_damage", "hp_low_ratio"],
+	"battle.intent": ["keep_distance", "keep_distance_band", "circle_radius", "circle_side",
+		"retreat_dist", "wall_margin", "flank_behind_deg", "flank_side", "flank_back",
+		"push_behind", "push_lined_dot"],
+	"agent.mock": ["repair_hp", "repair_hp_any_style", "repair_enemy_dist", "cautious_hp",
+		"random_intent_chance", "skill_booster_dist", "skill_shield_dist", "skill_repair_hp",
+		"skill_shockwave_dist", "skill_emp_dist", "skill_overclock_dist"],
+}
+
 const PERK_OPS: Array[String] = ["add", "mul"]
 ## パークの効果の対象にできる頭の部分（種類のほか）
 const PERK_EXTRA_TARGETS: Array[String] = ["build", "prompt"]
@@ -40,6 +83,9 @@ const NUMBER_RULES: Array = [
 	["loot.hand_limit", 0, true],
 	["parts.stat_spread", 0, false],
 	["parts.stat_step_default", 0, false],
+	["battle.draw_hp_ratio_diff", 0, false],
+	["battle.arena.half_size", 1, false],
+	["agent.say_max_chars", 1, true],
 ]
 
 
@@ -69,6 +115,11 @@ class PartDef:
 	var skill_slots: int = 0
 	## ステータス名 → 範囲
 	var stats: Dictionary[String, StatRange] = {}
+	## 抽選しない固定値（重さ、連射間隔、射程など）
+	var fixed: Dictionary[String, float] = {}
+
+	func get_fixed(key: String, fallback: float = 0.0) -> float:
+		return fixed.get(key, fallback)
 
 	## ステータス名を名前順で返す
 	func stat_names() -> Array[String]:
@@ -217,6 +268,25 @@ func _load_rules(rules_json: Variant) -> void:
 	_check_int_range_rule("parts.frame_weapon_slots", 1)
 	_check_int_range_rule("parts.frame_skill_slots", 0)
 
+	for group: String in NUMBER_GROUPS:
+		for key: String in NUMBER_GROUPS[group]:
+			var path: String = group + "." + key
+			var found_v: Array = _find_rule(path)
+			if not found_v[0]:
+				errors.append("rules.json：%s がない" % path)
+			elif not _is_finite_number(found_v[1]) or float(found_v[1]) < 0.0:
+				errors.append("rules.json：%s は 0 以上の数値にする" % path)
+	_check_circles("battle.arena.pits", true)
+	_check_circles("battle.arena.repair_pads", true)
+	var spawns: Variant = _find_rule("battle.arena.spawns")[1]
+	if not (spawns is Array) or (spawns as Array).size() != 2:
+		errors.append("rules.json：battle.arena.spawns は2つの { x, z, facing_deg } にする")
+	else:
+		for s: Variant in spawns:
+			if not (s is Dictionary) or not _is_finite_number(s.get("x")) \
+					or not _is_finite_number(s.get("z")) or not _is_finite_number(s.get("facing_deg")):
+				errors.append("rules.json：battle.arena.spawns の中身は { x, z, facing_deg } にする")
+
 	var steps: Variant = _find_rule("parts.stat_steps")[1]
 	if steps != null:
 		if not (steps is Dictionary):
@@ -225,6 +295,18 @@ func _load_rules(rules_json: Variant) -> void:
 			for k: Variant in steps:
 				if not _is_finite_number(steps[k]) or float(steps[k]) < 0.0:
 					errors.append("rules.json：parts.stat_steps.%s は 0 以上の数値にする" % str(k))
+
+
+## { x, z, r } の円の配列を検査する（穴や修理ステーション）
+func _check_circles(path: String, need_one: bool) -> void:
+	var v: Variant = _find_rule(path)[1]
+	if not (v is Array) or (need_one and (v as Array).is_empty()):
+		errors.append("rules.json：%s は { x, z, r } の配列にする" % path)
+		return
+	for c: Variant in v:
+		if not (c is Dictionary) or not _is_finite_number(c.get("x")) or not _is_finite_number(c.get("z")) \
+				or not _is_finite_number(c.get("r")) or float(c.get("r")) <= 0.0:
+			errors.append("rules.json：%s の中身は { x, z, r }（r は正）にする" % path)
 
 
 ## [最小, 最大] の形の整数の範囲を検査する
@@ -298,9 +380,32 @@ func _load_parts(parts_json: Variant) -> void:
 				var range_v: StatRange = _parse_stat(stats_raw[stat_key], stat_name, spread, where)
 				if range_v != null:
 					def.stats[stat_name] = range_v
-		for need: String in REQUIRED_STATS[def.kind]:
+		# 固定値
+		var fixed_raw: Variant = r.get("fixed", {})
+		if not (fixed_raw is Dictionary):
+			errors.append("%s：fixed は { } にする" % where)
+		else:
+			for fk: Variant in fixed_raw:
+				if _is_finite_number(fixed_raw[fk]) and float(fixed_raw[fk]) >= 0.0:
+					def.fixed[str(fk)] = float(fixed_raw[fk])
+				else:
+					errors.append("%s：fixed.%s は 0 以上の数値にする" % [where, str(fk)])
+
+		var need_stats: Array = REQUIRED_STATS[def.kind].duplicate()
+		var need_fixed: Array = REQUIRED_FIXED[def.kind].duplicate()
+		if BEHAVIORS.has(def.kind):
+			var table: Dictionary = BEHAVIORS[def.kind]
+			if not table.has(def.behavior):
+				errors.append("%s：behavior は %s のどれかにする（今は %s）" % [where, ", ".join(table.keys()), def.behavior])
+			else:
+				need_stats.append_array(table[def.behavior]["stats"])
+				need_fixed.append_array(table[def.behavior]["fixed"])
+		for need: String in need_stats:
 			if not def.stats.has(need):
 				errors.append("%s：ステータス %s がない" % [where, need])
+		for need: String in need_fixed:
+			if not def.fixed.has(need):
+				errors.append("%s：固定値 fixed.%s がない" % [where, need])
 
 		# フレームの枠
 		if def.kind == KIND_FRAME:
