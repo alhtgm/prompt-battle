@@ -5,6 +5,7 @@ extends RefCounted
 const GameData := preload("res://core/game_data.gd")
 const Rng := preload("res://core/rng.gd")
 const PartInstance := preload("res://core/part_instance.gd")
+const Build := preload("res://core/build.gd")
 
 
 ## 型から実物を1つ作る。ステータスは名前順に抽選する（順番を固定して再現性を保つ）
@@ -34,3 +35,22 @@ static func roll_offer(data: GameData, kind: String, count: int, rng: Rng, first
 	for i: int in defs.size():
 		out.append(roll_part(defs[i], rng, first_uid + i))
 	return out
+
+
+## ランダムな機体を1つ組む。武器は1つ以上、どちらもフレームの枠まで（型は重ならない）
+## uid は first_uid から順に振る。テストやCPUの仮の機体に使う
+static func random_build(data: GameData, rng: Rng, first_uid: int) -> Build:
+	var b := Build.new()
+	var uid: int = first_uid
+	var fdef: GameData.PartDef = rng.pick(data.defs_of_kind(GameData.KIND_FRAME))
+	b.frame = roll_part(fdef, rng, uid)
+	uid += 1
+	var n_weapons: int = rng.randi_range(1, fdef.weapon_slots)
+	for d: GameData.PartDef in rng.sample(data.defs_of_kind(GameData.KIND_WEAPON), n_weapons):
+		b.weapons.append(roll_part(d, rng, uid))
+		uid += 1
+	var n_skills: int = rng.randi_range(0, fdef.skill_slots)
+	for d: GameData.PartDef in rng.sample(data.defs_of_kind(GameData.KIND_SKILL), n_skills):
+		b.skills.append(roll_part(d, rng, uid))
+		uid += 1
+	return b

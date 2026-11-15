@@ -3,19 +3,96 @@
     "about": "試合のルールと仮置きした値。docs/design.md の「仮置きした値」に合わせる",
     "loot.hand_limit": "手持ちパーツの上限。0 は上限なし",
     "parts.stat_spread": "parts.json でステータスを基準値（数値1つ）で書いたときの振れ幅。0.2 なら ±20%",
-    "parts.stat_steps": "ステータスを抽選したあと丸める刻み。書いていないステータスは stat_step_default"
+    "parts.stat_steps": "ステータスを抽選したあと丸める刻み。書いていないステータスは stat_step_default",
+    "battle.draw_hp_ratio_diff": "時間切れで残りHPの割合の差がこれ未満なら引き分け",
+    "battle.arena": "上から見た平面。x が右、z が手前。角度は +x から +z へ回る向きが正（上から見て時計回り）",
+    "battle.hit.damage_scale": "すべてのダメージにかける倍率。バトルの長さの調整用",
+    "battle.replan": "考え直す切っ掛け。big_hit_damage は前回考えてから受けたダメージの合計",
+    "battle.intent": "方針ごとの目標の距離など（実行役が使う）",
+    "agent.mock": "仮の頭脳が方針とスキルを選ぶときのしきい値。hp は % 、dist は距離"
   },
   "players": 6,
   "initial_health": 100,
   "tick_rate": 60,
   "battle": {
-    "time_limit_sec": 75
+    "time_limit_sec": 75,
+    "draw_hp_ratio_diff": 0.01,
+    "arena": {
+      "half_size": 15,
+      "pits": [ { "x": -4, "z": -7, "r": 2.4 }, { "x": 4, "z": 7, "r": 2.4 } ],
+      "repair_pads": [ { "x": -11.5, "z": 10.5, "r": 2.0 }, { "x": 11.5, "z": -10.5, "r": 2.0 } ],
+      "spawns": [ { "x": -11, "z": 0, "facing_deg": 0 }, { "x": 11, "z": 0, "facing_deg": 180 } ]
+    },
+    "robot": {
+      "radius": 1.25,
+      "base_speed": 8.0,
+      "accel": 5.0,
+      "reverse_mult": 0.6,
+      "stun_friction": 3.0,
+      "sharp_turn_deg": 70,
+      "sharp_turn_throttle": 0.25,
+      "arrive_dist": 0.6
+    },
+    "pit": {
+      "fall_margin": 0.35,
+      "avoid_extra": 3.2,
+      "avoid_push": 1.8,
+      "avoid_slide": 1.0,
+      "near_dist": 4.0
+    },
+    "repair": {
+      "total_per_robot": 30,
+      "rate_per_sec": 10,
+      "max_speed": 1.5
+    },
+    "collision": {
+      "restitution": 1.3,
+      "ram_min_speed": 5,
+      "ram_damage_coef": 2.2,
+      "ram_cooldown_sec": 0.7
+    },
+    "hit": {
+      "damage_scale": 0.5,
+      "back_angle_deg": 120,
+      "back_mult": 1.5
+    },
+    "replan": {
+      "big_hit_damage": 12,
+      "hp_low_ratio": 0.5
+    },
+    "intent": {
+      "keep_distance": 9,
+      "keep_distance_band": 1.5,
+      "circle_radius": 7,
+      "circle_side": 4,
+      "retreat_dist": 8,
+      "wall_margin": 2,
+      "flank_behind_deg": 110,
+      "flank_side": 4.5,
+      "flank_back": 3,
+      "push_behind": 3.2,
+      "push_lined_dot": 0.8
+    }
   },
   "agent": {
     "think_interval_sec": 2.0,
     "think_min_gap_sec": 0.5,
     "mock_delay_min_sec": 0.3,
-    "mock_delay_max_sec": 1.5
+    "mock_delay_max_sec": 1.5,
+    "say_max_chars": 40,
+    "mock": {
+      "repair_hp": 30,
+      "repair_hp_any_style": 20,
+      "repair_enemy_dist": 5,
+      "cautious_hp": 50,
+      "random_intent_chance": 0.08,
+      "skill_booster_dist": 10,
+      "skill_shield_dist": 4,
+      "skill_repair_hp": 55,
+      "skill_shockwave_dist": 4.5,
+      "skill_emp_dist": 5.5,
+      "skill_overclock_dist": 3.5
+    }
   },
   "round": {
     "build_time_limit_sec": 45,
