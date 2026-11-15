@@ -37,10 +37,11 @@ func select(kind: String, uid: int) -> void:
 
 ## 選んだものを試合に伝えて、パーツ選びを締め切る。問題があれば理由を返す
 func confirm() -> String:
-	var err: String = session().draft_pick(main.HUMAN_ID, picks)
+	var err: String = session().draft_pick(main.human_id, picks)
 	if not err.is_empty():
 		_message.text = err
 		return err
+	show_waiting(_message)
 	session().finish_draft()
 	return ""
 

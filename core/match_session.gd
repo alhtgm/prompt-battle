@@ -113,6 +113,11 @@ func standings() -> Array[Player]:
 	return out
 
 
+## 通信対戦の写し（net/remote_session.gd）なら true。画面が「待っています」などの出し分けに使う
+func is_online() -> bool:
+	return false
+
+
 func is_finished() -> bool:
 	return phase == PHASE_FINISHED
 
@@ -354,9 +359,11 @@ func _add_battle(a: int, b: int) -> void:
 		prompts.append(pb.prompt)
 		names.append(pb.name)
 		humans.append(pb.is_human)
+	var ids: Array = [a, b]  # 記録の再生の側は GHOST_ID
 	var brains: Array = []
 	for side: int in 2:
-		brains.append(_agents.make_brain(humans[side], _rng.fork("round/%d/brain/%d/%d" % [round_no, k, side])))
+		brains.append(_agents.make_brain(humans[side], _rng.fork("round/%d/brain/%d/%d" % [round_no, k, side]),
+			ids[side]))
 	bt.prompts = prompts.duplicate()
 	bt.sim = BattleSim.new(data, builds, brains, prompts, names, _rng.fork("round/%d/battle/%d" % [round_no, k]))
 	battles.append(bt)

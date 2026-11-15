@@ -53,6 +53,8 @@ const NUMBER_GROUPS: Dictionary = {
 		"retreat_dist", "wall_margin", "flank_behind_deg", "flank_side", "flank_back",
 		"push_behind", "push_lined_dot"],
 	"agent.cpu": ["frame_slot_weight", "frame_whim", "part_whim"],
+	"online": ["port", "draft_time_limit_sec", "result_view_sec", "perk_time_limit_sec", "final_view_sec",
+		"state_send_hz", "frame_send_hz", "frame_log_entries"],
 	"agent.mock": ["repair_hp", "repair_hp_any_style", "repair_enemy_dist", "cautious_hp",
 		"random_intent_chance", "skill_booster_dist", "skill_shield_dist", "skill_repair_hp",
 		"skill_shockwave_dist", "skill_emp_dist", "skill_overclock_dist"],
