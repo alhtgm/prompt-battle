@@ -9,6 +9,11 @@
     "battle.hit.damage_scale": "すべてのダメージにかける倍率。バトルの長さの調整用",
     "battle.replan": "考え直す切っ掛け。big_hit_damage は前回考えてから受けたダメージの合計",
     "battle.intent": "方針ごとの目標の距離など（実行役が使う）",
+    "damage": "負けた人のダメージ = rank_coef × 順位 + margin_coef × 差（勝った側の残りHPの割合）。整数に丸める。順位は残り体力での順位で 1 が最上位",
+    "damage.on_draw": "バトルが引き分けのとき。none は両者ダメージなし、rank_only は両者に順位の分だけ",
+    "match.max_rounds": "試合が終わらないときの安全装置。このラウンド数で打ち切り、残り体力の順で順位を決める",
+    "match.pairing_attempts": "直前の相手と当たらない組み合わせを探す回数",
+    "agent.cpu": "CPUの組み立て。フレームは HP×速さ×(1+frame_slot_weight×枠の数) に ±frame_whim の気まぐれ。パーツは抽選の良さに 0〜part_whim の気まぐれ",
     "agent.mock": "仮の頭脳が方針とスキルを選ぶときのしきい値。hp は % 、dist は距離"
   },
   "players": 6,
@@ -80,6 +85,11 @@
     "mock_delay_min_sec": 0.3,
     "mock_delay_max_sec": 1.5,
     "say_max_chars": 40,
+    "cpu": {
+      "frame_slot_weight": 0.15,
+      "frame_whim": 0.15,
+      "part_whim": 0.4
+    },
     "mock": {
       "repair_hp": 30,
       "repair_hp_any_style": 20,
@@ -99,8 +109,13 @@
     "prompt_max_chars": 120
   },
   "damage": {
-    "rank_coef": 2,
-    "margin_coef": 20
+    "rank_coef": 6,
+    "margin_coef": 60,
+    "on_draw": "none"
+  },
+  "match": {
+    "max_rounds": 40,
+    "pairing_attempts": 50
   },
   "draft": {
     "choices_per_kind": 5,

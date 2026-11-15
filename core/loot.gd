@@ -1,5 +1,5 @@
 # パーツの抽選。型を選び、ステータスを範囲内で抽選して実物を作る。
-# ラウンド後の配布とパーク候補は段階3で足す。
+# 開始時の選出、ラウンド後の配布、パークの候補もここで作る。
 extends RefCounted
 
 const GameData := preload("res://core/game_data.gd")
@@ -34,6 +34,41 @@ static func roll_offer(data: GameData, kind: String, count: int, rng: Rng, first
 	var out: Array[PartInstance] = []
 	for i: int in defs.size():
 		out.append(roll_part(defs[i], rng, first_uid + i))
+	return out
+
+
+## 開始時の選出：種類ごとに per_kind 個。返す辞書：種類 → 実物の配列
+static func draft_offer(data: GameData, rng: Rng, per_kind: int, first_uid: int) -> Dictionary:
+	var out: Dictionary = {}
+	var uid: int = first_uid
+	for kind: String in GameData.KINDS:
+		out[kind] = roll_offer(data, kind, per_kind, rng, uid)
+		uid += per_kind
+	return out
+
+
+## ラウンド後の配布：count 個。各種類を min_per_kind 個以上含め、残りは種類も含めてランダム
+static func deal_round(data: GameData, rng: Rng, count: int, min_per_kind: int, first_uid: int) -> Array[PartInstance]:
+	var kinds: Array[String] = []
+	for kind: String in GameData.KINDS:
+		for k: int in min_per_kind:
+			kinds.append(kind)
+	while kinds.size() < count:
+		kinds.append(rng.pick(GameData.KINDS))
+	var out: Array[PartInstance] = []
+	for i: int in kinds.size():
+		var def: GameData.PartDef = rng.pick(data.defs_of_kind(kinds[i]))
+		out.append(roll_part(def, rng, first_uid + i))
+	return out
+
+
+## パークの候補：重ならないように count 個のID
+static func perk_choices(data: GameData, rng: Rng, count: int) -> Array[String]:
+	var ids: Array = []
+	for p: GameData.PerkDef in data.perks:
+		ids.append(p.id)
+	var out: Array[String] = []
+	out.assign(rng.sample(ids, count))
 	return out
 
 

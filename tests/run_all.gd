@@ -1,5 +1,6 @@
 # 自動テストの入口。tests/ にある test_*.gd を順に実行し、失敗があれば終了コード 1 で終わる。
 # 実行：godot --headless --path . -s tests/run_all.gd
+# 一部だけ：godot --headless --path . -s tests/run_all.gd -- --only=test_match（ファイル名に含む文字で絞る）
 extends SceneTree
 
 const TEST_DIR: String = "res://tests"
@@ -26,9 +27,13 @@ func _init() -> void:
 	var counter := ErrorCounter.new()
 	OS.add_logger(counter)
 
+	var only: String = ""
+	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with("--only="):
+			only = arg.get_slice("=", 1)
 	var files: Array[String] = []
 	for f: String in DirAccess.get_files_at(TEST_DIR):
-		if f.begins_with("test_") and f.ends_with(".gd"):
+		if f.begins_with("test_") and f.ends_with(".gd") and (only.is_empty() or f.contains(only)):
 			files.append(f)
 	files.sort()
 

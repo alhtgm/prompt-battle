@@ -62,6 +62,17 @@ func test_core_and_agent_do_not_depend_on_scenes_or_global_random() -> void:
 					check(false, "%s:%d %s" % [path, i + 1, p[1]])
 
 
+func test_core_does_not_depend_on_agent() -> void:
+	# 頭脳とCPUの判断は外から渡す。core/ が agent/ を読み込むと差し替えられなくなる
+	var files: Array[String] = []
+	_collect("res://core", files)
+	for path: String in files:
+		var lines: PackedStringArray = FileAccess.get_file_as_string(path).split("\n")
+		for i: int in lines.size():
+			if _strip_comment(lines[i]).contains("res://agent/"):
+				check(false, "%s:%d core/ から agent/ を読み込んでいる" % [path, i + 1])
+
+
 func test_each_script_has_header_comment() -> void:
 	var files: Array[String] = []
 	for d: String in PURE_DIRS + ["res://tests"]:
