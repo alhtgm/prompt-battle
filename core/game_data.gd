@@ -52,6 +52,7 @@ const NUMBER_GROUPS: Dictionary = {
 	"battle.intent": ["keep_distance", "keep_distance_band", "circle_radius", "circle_side",
 		"retreat_dist", "wall_margin", "flank_behind_deg", "flank_side", "flank_back",
 		"push_behind", "push_lined_dot"],
+	"agent.cpu": ["frame_slot_weight", "frame_whim", "part_whim"],
 	"agent.mock": ["repair_hp", "repair_hp_any_style", "repair_enemy_dist", "cautious_hp",
 		"random_intent_chance", "skill_booster_dist", "skill_shield_dist", "skill_repair_hp",
 		"skill_shockwave_dist", "skill_emp_dist", "skill_overclock_dist"],
@@ -86,7 +87,12 @@ const NUMBER_RULES: Array = [
 	["battle.draw_hp_ratio_diff", 0, false],
 	["battle.arena.half_size", 1, false],
 	["agent.say_max_chars", 1, true],
+	["match.max_rounds", 1, true],
+	["match.pairing_attempts", 1, true],
 ]
+
+## 引き分けのときのダメージの扱い
+const DRAW_DAMAGE_MODES: Array[String] = ["none", "rank_only"]
 
 
 ## ステータスの範囲と、抽選後に丸める刻み
@@ -276,6 +282,8 @@ func _load_rules(rules_json: Variant) -> void:
 				errors.append("rules.json：%s がない" % path)
 			elif not _is_finite_number(found_v[1]) or float(found_v[1]) < 0.0:
 				errors.append("rules.json：%s は 0 以上の数値にする" % path)
+	if not DRAW_DAMAGE_MODES.has(str(_find_rule("damage.on_draw")[1])):
+		errors.append("rules.json：damage.on_draw は %s のどれかにする" % ", ".join(DRAW_DAMAGE_MODES))
 	_check_circles("battle.arena.pits", true)
 	_check_circles("battle.arena.repair_pads", true)
 	var spawns: Variant = _find_rule("battle.arena.spawns")[1]
