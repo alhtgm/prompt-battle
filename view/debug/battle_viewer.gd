@@ -1,5 +1,5 @@
 # 開発用の仮の観戦画面。ランダムな機体同士のバトルを、上から見た2Dで実時間に描く（段階5の3D表示ができるまでの仮）。
-# 試合の状態は読むだけで、進めるのは BattleSim.step() だけ。操作：Space 一時停止 / N 次の試合 / 1〜4 速さ / R 同じ種でやり直し
+# 試合の状態は読むだけで、進めるのは BattleSim.step() だけ。操作：Space 一時停止 / N 次の試合 / 1〜4 速さ / R 同じ種でやり直し / Esc タイトルへ
 extends Node2D
 
 const GameData := preload("res://core/game_data.gd")
@@ -136,6 +136,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_start_match(seed_value)
 		KEY_1, KEY_2, KEY_3, KEY_4:
 			_speed_index = k.keycode - KEY_1
+		KEY_ESCAPE:
+			get_tree().change_scene_to_file("res://view/main.tscn")
 
 
 # ---- 出来事を実況の行にする ----
@@ -259,7 +261,7 @@ func _draw_panel() -> void:
 	for line: String in log_lines:
 		_text(Vector2(PANEL_X, y), line, 13)
 		y += 17.0
-	_text(Vector2(PANEL_X, 705.0), "Space 一時停止 / N 次の試合 / R やり直し / 1〜4 速さ", 13, COL_DIM)
+	_text(Vector2(PANEL_X, 705.0), "Space 一時停止 / N 次の試合 / R やり直し / 1〜4 速さ / Esc タイトルへ", 13, COL_DIM)
 
 
 func _draw_robot_info(r: Robot, y: float) -> float:

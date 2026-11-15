@@ -23,7 +23,12 @@ class ErrorCounter extends Logger:
 		pass
 
 
-func _init() -> void:
+## シーンツリーが動き始めてからテストを始める（画面のテストが await でフレームを待てるように）
+func _initialize() -> void:
+	_run_all()
+
+
+func _run_all() -> void:
 	var counter := ErrorCounter.new()
 	OS.add_logger(counter)
 
@@ -56,7 +61,7 @@ func _init() -> void:
 			suite.failures = PackedStringArray()
 			var errors_before: int = counter.count
 			var t0: int = Time.get_ticks_msec()
-			suite.call(name)
+			await suite.call(name)  # await でフレームを待つテストも、待たないテストも同じに扱う
 			var ms: int = Time.get_ticks_msec() - t0
 			var fails: PackedStringArray = suite.failures
 			if counter.count > errors_before:
