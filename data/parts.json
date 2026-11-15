@@ -1,0 +1,53 @@
+{
+  "_notes": {
+    "about": "パーツの型。ステータスは基準値（数値1つ。rules.json の parts.stat_spread で上下に振れる）か {\"min\": x, \"max\": y} で書く",
+    "frame": "hp: 機体のHP / speed_penalty: 移動速度の低下（0.1 なら 10% 遅くなる）",
+    "weapon": "damage: ダメージ（ドリル・丸ノコは毎秒） / knockback: 吹き飛ばしの強さ / behavior: バトルでの動き方",
+    "skill": "スキルごとの性能値。behavior でどのスキルかを決める",
+    "model": "見た目のモデルの場所。骨組みでは仮（ファイルはまだない）"
+  },
+  "parts": [
+    { "id": "frame_light",    "name": "軽量フレーム",   "kind": "frame", "weapon_slots": 1, "skill_slots": 2,
+      "stats": { "hp": 90,  "speed_penalty": 0.05 }, "model": "res://assets/models/parts/frame_light.glb" },
+    { "id": "frame_standard", "name": "標準フレーム",   "kind": "frame", "weapon_slots": 2, "skill_slots": 1,
+      "stats": { "hp": 120, "speed_penalty": 0.12 }, "model": "res://assets/models/parts/frame_standard.glb" },
+    { "id": "frame_heavy",    "name": "重装甲フレーム", "kind": "frame", "weapon_slots": 2, "skill_slots": 1,
+      "stats": { "hp": 160, "speed_penalty": 0.30 }, "model": "res://assets/models/parts/frame_heavy.glb" },
+    { "id": "frame_wedge",    "name": "くさび型フレーム", "kind": "frame", "weapon_slots": 1, "skill_slots": 1,
+      "stats": { "hp": 110, "speed_penalty": 0.10 }, "model": "res://assets/models/parts/frame_wedge.glb" },
+    { "id": "frame_tank",     "name": "戦車フレーム",   "kind": "frame", "weapon_slots": 3, "skill_slots": 0,
+      "stats": { "hp": 180, "speed_penalty": 0.38 }, "model": "res://assets/models/parts/frame_tank.glb" },
+    { "id": "frame_spider",   "name": "多脚フレーム",   "kind": "frame", "weapon_slots": 2, "skill_slots": 2,
+      "stats": { "hp": 100, "speed_penalty": 0.08 }, "model": "res://assets/models/parts/frame_spider.glb" },
+
+    { "id": "weapon_drill",  "name": "ドリル",   "kind": "weapon", "behavior": "drill",
+      "stats": { "damage": 13,  "knockback": 0.5 }, "model": "res://assets/models/parts/weapon_drill.glb" },
+    { "id": "weapon_hammer", "name": "ハンマー", "kind": "weapon", "behavior": "hammer",
+      "stats": { "damage": 20,  "knockback": 6 },   "model": "res://assets/models/parts/weapon_hammer.glb" },
+    { "id": "weapon_lifter", "name": "リフター", "kind": "weapon", "behavior": "lifter",
+      "stats": { "damage": 6,   "knockback": 3 },   "model": "res://assets/models/parts/weapon_lifter.glb" },
+    { "id": "weapon_bumper", "name": "バンパー", "kind": "weapon", "behavior": "bumper",
+      "stats": { "damage": 8,   "knockback": 9 },   "model": "res://assets/models/parts/weapon_bumper.glb" },
+    { "id": "weapon_saw",    "name": "丸ノコ",   "kind": "weapon", "behavior": "saw",
+      "stats": { "damage": 10,  "knockback": 1 },   "model": "res://assets/models/parts/weapon_saw.glb" },
+    { "id": "weapon_spike",  "name": "スパイク", "kind": "weapon", "behavior": "spike",
+      "stats": { "damage": 12,  "knockback": 2 },   "model": "res://assets/models/parts/weapon_spike.glb" },
+    { "id": "weapon_mg",     "name": "機関銃",   "kind": "weapon", "behavior": "mg",
+      "stats": { "damage": 1.5, "knockback": 0 },   "model": "res://assets/models/parts/weapon_mg.glb" },
+    { "id": "weapon_rocket", "name": "ロケット", "kind": "weapon", "behavior": "rocket",
+      "stats": { "damage": 17,  "knockback": 7 },   "model": "res://assets/models/parts/weapon_rocket.glb" },
+
+    { "id": "skill_booster",   "name": "ブースター",       "kind": "skill", "behavior": "booster",
+      "stats": { "speed_mult": 2.0 },  "model": "res://assets/models/parts/skill_booster.glb" },
+    { "id": "skill_shield",    "name": "シールド",         "kind": "skill", "behavior": "shield",
+      "stats": { "damage_cut": 0.5 },  "model": "res://assets/models/parts/skill_shield.glb" },
+    { "id": "skill_repair",    "name": "応急修理",         "kind": "skill", "behavior": "repair",
+      "stats": { "heal": 25 },         "model": "res://assets/models/parts/skill_repair.glb" },
+    { "id": "skill_shockwave", "name": "衝撃波",           "kind": "skill", "behavior": "shockwave",
+      "stats": { "knockback": 8 },     "model": "res://assets/models/parts/skill_shockwave.glb" },
+    { "id": "skill_emp",       "name": "EMP",              "kind": "skill", "behavior": "emp",
+      "stats": { "stun_sec": 1.5 },    "model": "res://assets/models/parts/skill_emp.glb" },
+    { "id": "skill_overclock", "name": "オーバークロック", "kind": "skill", "behavior": "overclock",
+      "stats": { "damage_mult": 1.3 }, "model": "res://assets/models/parts/skill_overclock.glb" }
+  ]
+}

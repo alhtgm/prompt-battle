@@ -1,0 +1,23 @@
+{
+  "_notes": {
+    "about": "パークの定義。効果は試合の間ずっと積み重なる",
+    "target": "<種類>.<ステータス>（例 frame.hp）。skill.* はスキルの全ステータス。build.* は機体の枠、prompt.* はプロンプト",
+    "op": "mul は掛け算、add は足し算"
+  },
+  "perks": [
+    { "id": "perk_armor",  "name": "装甲強化",       "description": "フレームのHP+5%",
+      "effects": [ { "target": "frame.hp", "op": "mul", "value": 1.05 } ] },
+    { "id": "perk_power",  "name": "火力強化",       "description": "武器のダメージ+10%",
+      "effects": [ { "target": "weapon.damage", "op": "mul", "value": 1.10 } ] },
+    { "id": "perk_wheels", "name": "足回り調整",     "description": "移動速度の低下を20%減らす",
+      "effects": [ { "target": "frame.speed_penalty", "op": "mul", "value": 0.80 } ] },
+    { "id": "perk_impact", "name": "衝撃強化",       "description": "武器のノックバック+15%",
+      "effects": [ { "target": "weapon.knockback", "op": "mul", "value": 1.15 } ] },
+    { "id": "perk_tuning", "name": "スキル調整",     "description": "スキルの性能+10%",
+      "effects": [ { "target": "skill.*", "op": "mul", "value": 1.10 } ] },
+    { "id": "perk_mount",  "name": "増設マウント",   "description": "付けられる武器+1",
+      "effects": [ { "target": "build.weapon_slots", "op": "add", "value": 1 } ] },
+    { "id": "perk_vocab",  "name": "語彙力アップ",   "description": "プロンプトの文字数+20",
+      "effects": [ { "target": "prompt.max_chars", "op": "add", "value": 20 } ] }
+  ]
+}
