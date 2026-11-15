@@ -8,7 +8,6 @@ const Loot := preload("res://core/loot.gd")
 const BattleSim := preload("res://core/battle_sim.gd")
 const Robot := preload("res://core/battle_robot.gd")
 const RobotDriver := preload("res://core/robot_driver.gd")
-const LlmBrain := preload("res://agent/llm_brain.gd")
 const AgentBrain := preload("res://agent/agent_brain.gd")
 
 ## 偏りを測る試合数
@@ -161,11 +160,11 @@ func test_mock_brain_answers_after_delay_in_match_time() -> void:
 
 
 func test_brain_requests_every_interval_and_match_runs_without_answers() -> void:
-	# 答えを返さない頭脳（中身なしの本番の頭脳）でも、試合は止まらずに時間切れまで進む
+	# 答えを返さない頭脳（共通の入口そのもの）でも、試合は止まらずに時間切れまで進む
 	var data := H.load_data()
 	var setup := Rng.new(1)
 	var builds: Array = [Loot.random_build(data, setup, 1), Loot.random_build(data, setup, 50)]
-	var sim := BattleSim.new(data, builds, [LlmBrain.new(), LlmBrain.new()], ["", ""], ["A", "B"], Rng.new(2))
+	var sim := BattleSim.new(data, builds, [AgentBrain.new(), AgentBrain.new()], ["", ""], ["A", "B"], Rng.new(2))
 	var res: Dictionary = sim.run_to_end()
 	check_eq(res["reason"], BattleSim.REASON_TIME, "誰も動かなければ時間切れ")
 	check_eq(res["ticks"], sim.time_limit_ticks, "制限時間ちょうどで終わる")

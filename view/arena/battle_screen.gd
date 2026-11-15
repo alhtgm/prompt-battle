@@ -129,8 +129,8 @@ func refresh() -> void:
 	var sim: Variant = watched_battle.sim
 	var names: Array = [sim.robots[0].name, sim.robots[1].name]
 	var spectating: String = "（観戦中）" if not s.get_player(main.HUMAN_ID).alive else ""
-	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s倍）" % [
-		s.round_no, spectating, sim.now(), sim.time_left(), main.battle_speed]
+	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s倍）\n%s" % [
+		s.round_no, spectating, sim.now(), sim.time_left(), main.battle_speed, main.agents.brain_status_text()]
 	if sim.over:
 		var w: int = int(sim.result["winner"])
 		header.text += "\n決着：%s（%s）　ほかの試合が終わるのを待っています" % [

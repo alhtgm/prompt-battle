@@ -1,0 +1,35 @@
+{
+  "_notes": {
+    "about": "本番の頭脳（llama.cpp の llama-server を裏で起動して使う）の設定",
+    "search_dirs": "サーバーとモデルを探すフォルダ（上から順）。相対パスはプロジェクトのフォルダから、~ はユーザーフォルダ。tools/fetch_llm.ps1 は既定で ~/Godot/llm に置く",
+    "enabled": "false にすると全員が仮の頭脳で操縦する",
+    "model": "使うモデル（search_dirs の中の相対パス）",
+    "threads": "推論に使うCPUのスレッド数。0 はサーバーに任せる",
+    "say_max_chars": "操縦士の一言の最大文字数（文法で縛る。短いほど速く答える）",
+    "request_timeout_sec": "1回の問い合わせを待つ上限（実時間）。超えたら失敗として扱い、前の方針を続ける",
+    "obs_style": "戦況の渡し方。text は短い日本語の文、json は観測の JSON",
+    "say_first": "true なら一言（say）を方針より先に書かせる（一言が判断の下書きになる）",
+    "describe": "戦況を文にするときの言い方の境目。hp は % で、hp_low 未満は「少ない」、hp_high 以上は「多い」。dist_touch 以下は「接触」、dist_far 以上は「遠い」"
+  },
+  "enabled": true,
+  "search_dirs": ["llm", "~/Godot/llm"],
+  "server_exe": "bin/llama-server.exe",
+  "model": "models/Qwen3.5-2B-Q4_K_M.gguf",
+  "host": "127.0.0.1",
+  "port": 8399,
+  "ctx_size": 4096,
+  "threads": 8,
+  "temperature": 0.3,
+  "max_tokens": 48,
+  "say_max_chars": 12,
+  "obs_style": "json",
+  "say_first": false,
+  "describe": {
+    "hp_low": 30,
+    "hp_high": 60,
+    "dist_touch": 3.5,
+    "dist_far": 10
+  },
+  "startup_timeout_sec": 60,
+  "request_timeout_sec": 8
+}
