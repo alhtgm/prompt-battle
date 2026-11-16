@@ -23,6 +23,8 @@ func _init(cfg: LlmConfig) -> void:
 
 ## モデルの名前（画面の表示用）
 func model_name() -> String:
+	if config.is_external():
+		return str(config.values.get("external_label", "外部サーバー"))
 	return config.model_path.get_file().get_basename()
 
 
@@ -32,12 +34,16 @@ func start() -> void:
 	if not config.problem.is_empty():
 		_set_failed(config.problem)
 		return
+	if config.is_external():
+		status = Status.STARTING  # 起動はせず、/health が答えるのを待つだけ
+		_deadline_ms = Time.get_ticks_msec() + int(float(config.get_value("startup_timeout_sec")) * 1000.0)
+		return
 	var args: PackedStringArray = [
 		"-m", config.model_path,
 		"--host", str(config.get_value("host")),
 		"--port", str(int(config.get_value("port"))),
 		"-c", str(int(config.get_value("ctx_size"))),
-		"-np", "1",
+		"-np", str(maxi(1, int(config.values.get("parallel", 1)))),
 	]
 	if int(config.get_value("threads")) > 0:
 		args.append_array(["-t", str(int(config.get_value("threads")))])

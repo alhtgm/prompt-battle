@@ -26,6 +26,13 @@ var log_label: Label
 var others_label: Label
 ## 機体の頭上に重ねる名前と一言
 var bubbles: Array[Label] = []
+## 開発用：本番の頭脳の問い合わせの記録（F2 で開け閉め。F3 で渡している指示文に切り替え。F4 で見る機体を切り替え）
+var llm_panel: Control
+var llm_text: RichTextLabel
+var _llm_show_system: bool = false
+var _llm_side: int = 0
+var _llm_sig: String = ""
+const LLM_SHOWN: int = 12
 
 
 func build_ui() -> void:
@@ -67,7 +74,10 @@ func build_ui() -> void:
 	row.add_theme_constant_override("separation", 8)
 	top.add_child(row)
 	row.visible = not main.session.is_online()  # 通信対戦では、速さはサーバーが決める
-	for spec: Array in [["1倍", set_speed.bind(1.0)], ["4倍", set_speed.bind(4.0)], ["最後まで飛ばす", skip]]:
+	var specs: Array = [["1倍", set_speed.bind(1.0)], ["4倍", set_speed.bind(4.0)], ["最後まで飛ばす", skip]]
+	if main.agents.llm_server != null:
+		specs.append(["LLMの記録（F2）", toggle_llm_panel])
+	for spec: Array in specs:
 		var b := Button.new()
 		b.text = spec[0]
 		b.custom_minimum_size = Vector2(110, 36)
@@ -98,8 +108,117 @@ func build_ui() -> void:
 	var bottom_right: VBoxContainer = _panel(Control.PRESET_BOTTOM_RIGHT, Vector2(16, 12), true)
 	_label(bottom_right, "ほかの試合", 15, COL_DIM)
 	others_label = _label(bottom_right, "", 15, COL_DIM)
+	_build_llm_panel()
 	_fill_prompts()
 	refresh()
+
+
+## 開発用の板：右の真ん中に、本番の頭脳への問い合わせを新しい順に並べる
+func _build_llm_panel() -> void:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.03, 0.04, 0.88)
+	style.border_color = Look.UI_BORDER
+	style.set_border_width_all(1)
+	style.set_content_margin_all(10)
+	panel.add_theme_stylebox_override("panel", style)
+	add_child(panel)
+	panel.anchor_left = 0.5
+	panel.anchor_right = 1.0
+	panel.anchor_top = 0.2
+	panel.anchor_bottom = 0.78
+	panel.offset_left = 0.0
+	panel.offset_right = -16.0
+	llm_text = RichTextLabel.new()
+	llm_text.bbcode_enabled = true
+	llm_text.scroll_following = false
+	llm_text.selection_enabled = true
+	llm_text.add_theme_font_size_override("normal_font_size", 13)
+	llm_text.add_theme_font_size_override("bold_font_size", 14)
+	panel.add_child(llm_text)
+	llm_panel = panel
+	llm_panel.visible = false
+
+
+func toggle_llm_panel() -> void:
+	llm_panel.visible = not llm_panel.visible
+	_llm_sig = ""
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	var k := event as InputEventKey
+	if k == null or not k.pressed or k.echo or main.agents.llm_server == null:
+		return
+	if k.keycode == KEY_F2:
+		toggle_llm_panel()
+	elif k.keycode == KEY_F3 and llm_panel.visible:
+		_llm_show_system = not _llm_show_system
+		_llm_sig = ""
+	elif k.keycode == KEY_F4 and llm_panel.visible:
+		_llm_side = 1 - _llm_side
+		_llm_sig = ""
+
+
+## 記録を読んで板の文を作る（変わったときだけ作り直す）
+func _refresh_llm_panel() -> void:
+	if llm_panel == null or not llm_panel.visible:
+		return
+	var ids: Array = [watched_battle.a, watched_battle.b]
+	var brain: Variant = main.agents.llm_brains.get(ids[_llm_side])
+	var hist: Array = brain.history if brain != null else []
+	var sig: String = "%d/%s/%d/%s" % [_llm_side, _llm_show_system, hist.size(),
+		str(hist.back()["answered_at"]) if not hist.is_empty() else ""]
+	if brain != null:
+		sig += "/%d" % int(brain.stats["requests"])
+	if sig == _llm_sig:
+		return
+	_llm_sig = sig
+	var out: PackedStringArray = PackedStringArray()
+	out.append("[b][color=#%s]%s[/color] の本番の頭脳の記録[/b]　%s　[color=#9a968c]（F2 閉じる / F3 %s / F4 相手の機体）[/color]" % [
+		SIDE_COLORS[_llm_side].to_html(false), _esc(watched_battle.sim.robots[_llm_side].name),
+		_esc(main.agents.llm_server.model_name()), "記録に戻る" if _llm_show_system else "指示文を見る"])
+	if brain == null:
+		out.append("この機体は本番の頭脳で動いていない（自分の試合の2機だけ。data/llm.json の cpu_opponent）")
+		llm_text.text = "\n".join(out)
+		return
+	var st: Dictionary = brain.stats
+	var answered: int = int(st["ok"]) + int(st["bad"]) + int(st["failed"])
+	out.append("問い合わせ %d 回　読めた %d　壊れた答え %d　失敗 %d　平均 %d ms　最大 %d ms%s" % [
+		st["requests"], st["ok"], st["bad"], st["failed"], int(st["total_ms"]) / maxi(1, answered), st["max_ms"],
+		"　[color=#e0a060]（サーバーが使えないので仮の頭脳で動いている）[/color]" if brain.using_fallback() else ""])
+	if _llm_show_system:
+		out.append("\n[b]指示文（最初に1回だけ渡す部分）[/b]")
+		out.append("[color=#c8c4b8]%s[/color]" % _esc(brain.system_prompt))
+		llm_text.text = "\n".join(out)
+		return
+	var shown: int = 0
+	for idx: int in range(hist.size() - 1, -1, -1):
+		if shown >= LLM_SHOWN:
+			break
+		shown += 1
+		var rec: Dictionary = hist[idx]
+		out.append("")
+		if float(rec["answered_at"]) < 0.0:
+			out.append("[color=#9ad0ff]#%d　%.1f秒に問い合わせ → 考え中…[/color]" % [idx + 1, rec["asked_at"]])
+		else:
+			var ans: Dictionary = rec["answer"]
+			var result: String
+			if not str(rec["error"]).is_empty():
+				result = "[color=#ff7060]%s[/color]" % _esc(str(rec["error"]))
+			else:
+				result = "[color=#fff0a0]%s（%s）　スキル %s　「%s」[/color]" % [
+					UiText.INTENT_LABELS.get(ans["intent"], ans["intent"]), ans["intent"],
+					"なし" if ans["skill"] == null else str(ans["skill"]), _esc(str(ans["say"]))]
+			out.append("[b]#%d　%.1f秒 → %.1f秒（%d ms）[/b]　%s" % [
+				idx + 1, rec["asked_at"], rec["answered_at"], rec["ms"], result])
+		out.append("[color=#8f8b80]送った戦況：%s[/color]" % _esc(str(rec["sent"])))
+		if not str(rec["raw"]).is_empty():
+			out.append("[color=#8f8b80]生の答え：%s[/color]" % _esc(str(rec["raw"])))
+	llm_text.text = "\n".join(out)
+
+
+static func _esc(s: String) -> String:
+	return s.replace("[", "[lb]")
 
 
 ## プロンプトの見せ方（企画メモ「観戦」）：生き残っている間は自分のものだけ、脱落したら両方見える
@@ -192,6 +311,7 @@ func refresh() -> void:
 		others.append("%s vs %s：%s　HP %d%% / %d%%" % [o.robots[0].name, o.robots[1].name, status,
 			roundi(o.robots[0].hp_ratio() * 100.0), roundi(o.robots[1].hp_ratio() * 100.0)])
 	others_label.text = "\n".join(others)
+	_refresh_llm_panel()
 
 
 ## 画面の角や上に置く、半透明の板つきの縦並び

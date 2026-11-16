@@ -37,8 +37,13 @@ var skill_count: int = 0
 var stats: Dictionary = {"requests": 0, "ok": 0, "bad": 0, "failed": 0, "total_ms": 0, "max_ms": 0}
 var last_error: String = ""
 var last_raw: String = ""
+## 開発用の記録：1回の問い合わせごとに、送った戦況・生の答え・読み取った結果・かかった時間を残す（新しいものが後ろ）
+## {"asked_at": 試合時間, "answered_at": 試合時間か -1, "ms": int, "sent": String, "raw": String, "answer": Dictionary, "error": String}
+var history: Array[Dictionary] = []
+const HISTORY_MAX: int = 50
 
 var _job: HttpJob = null
+var _now: float = 0.0
 var _pending_obs: Dictionary = {}
 var _answer: Dictionary = {}
 var _say_max: int = 12
@@ -62,6 +67,7 @@ func begin(prompt: String, build: Dictionary, rules: Dictionary) -> void:
 	grammar = build_grammar(skill_count, _say_max, say_first)
 	_pending_obs = {}
 	_answer = {}
+	history.clear()
 	if _job != null:
 		_job.cancel()
 	_job = null
@@ -80,6 +86,7 @@ func request(observation: Dictionary) -> void:
 func poll(now: float) -> Dictionary:
 	if _use_fallback():
 		return fallback.poll(now)
+	_now = now
 	if _job != null and _job.poll() != HttpJob.State.RUNNING:
 		_take_result(_job)
 		_job = null
@@ -91,19 +98,28 @@ func poll(now: float) -> Dictionary:
 	return a
 
 
-func _use_fallback() -> bool:
+## サーバーが使えないので、中の仮の頭脳で動いているか
+func using_fallback() -> bool:
 	return fallback != null and server.is_failed()
+
+
+func _use_fallback() -> bool:
+	return using_fallback()
 
 
 func _try_send() -> void:
 	if _job != null or _pending_obs.is_empty() or not server.is_ready():
 		return
 	var cfg: Variant = server.config
+	var sent: String = describe_observation(_pending_obs, _describe) if _text_obs \
+		else JSON.stringify(compact_observation(_pending_obs))
+	history.append({"asked_at": _now, "answered_at": -1.0, "ms": 0, "sent": sent, "raw": "", "answer": {}, "error": ""})
+	if history.size() > HISTORY_MAX:
+		history.pop_front()
 	var payload: Dictionary = {
 		"messages": [
 			{"role": "system", "content": system_prompt},
-			{"role": "user", "content": describe_observation(_pending_obs, _describe) if _text_obs
-				else JSON.stringify(compact_observation(_pending_obs))},
+			{"role": "user", "content": sent},
 		],
 		"grammar": grammar,
 		"max_tokens": int(cfg.get_value("max_tokens")),
@@ -121,9 +137,13 @@ func _try_send() -> void:
 func _take_result(job: HttpJob) -> void:
 	stats["total_ms"] += job.elapsed_ms
 	stats["max_ms"] = maxi(int(stats["max_ms"]), job.elapsed_ms)
+	var rec: Dictionary = history.back() if not history.is_empty() else {}
+	rec["answered_at"] = _now
+	rec["ms"] = job.elapsed_ms
 	if job.state == HttpJob.State.FAILED or job.status_code != 200:
 		stats["failed"] += 1
 		last_error = job.error if job.state == HttpJob.State.FAILED else "HTTP %d" % job.status_code
+		rec["error"] = last_error
 		_answer = CONFUSED.duplicate()
 		return
 	var parsed: Variant = quiet_parse(job.text())
@@ -133,12 +153,15 @@ func _take_result(job: HttpJob) -> void:
 		if choices is Array and not (choices as Array).is_empty():
 			content = str(choices[0].get("message", {}).get("content", ""))
 	last_raw = content
+	rec["raw"] = content
 	var answer: Dictionary = parse_answer(content, skill_count, _say_max)
 	if answer.is_empty():
 		stats["bad"] += 1
+		rec["error"] = "壊れた答え"
 		_answer = CONFUSED.duplicate()
 	else:
 		stats["ok"] += 1
+		rec["answer"] = answer
 		_answer = answer
 
 

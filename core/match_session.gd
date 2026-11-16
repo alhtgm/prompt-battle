@@ -363,7 +363,7 @@ func _add_battle(a: int, b: int) -> void:
 	var brains: Array = []
 	for side: int in 2:
 		brains.append(_agents.make_brain(humans[side], _rng.fork("round/%d/brain/%d/%d" % [round_no, k, side]),
-			ids[side]))
+			ids[side], humans[1 - side]))
 	bt.prompts = prompts.duplicate()
 	bt.sim = BattleSim.new(data, builds, brains, prompts, names, _rng.fork("round/%d/battle/%d" % [round_no, k]))
 	battles.append(bt)

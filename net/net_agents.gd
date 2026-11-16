@@ -17,7 +17,8 @@ func _init(game_server: Node) -> void:
 	server = game_server
 
 
-func make_brain(is_human: bool, rng: Rng, player_id: int = -1) -> RefCounted:
+## faces_human は標準のセットと同じ形にするための引数。サーバーはAIを動かさないので使わない
+func make_brain(is_human: bool, rng: Rng, player_id: int = -1, _faces_human: bool = false) -> RefCounted:
 	var mock := MockBrain.new(rng)
 	if is_human and player_id >= 0:
 		return server.create_remote_brain(player_id, mock)
