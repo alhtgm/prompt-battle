@@ -180,17 +180,22 @@ func submit_build(_player_id: int, frame_uid: int, weapon_uids: Array, skill_uid
 	var me: Player = get_player(my_id)
 	if me == null or not me.alive:
 		return "参加していない"
-	var b: Build = _build_from_uids(me, {"frame": frame_uid, "weapons": weapon_uids, "skills": skill_uids})
-	var err: String = b.validate(data, me.extra_weapon_slots(data), me.extra_skill_slots(data))
-	if not err.is_empty():
-		return err
-	if prompt.length() > me.prompt_max_chars(data):
-		return "プロンプトが長すぎる（%d / %d 文字）" % [prompt.length(), me.prompt_max_chars(data)]
+	var r: Dictionary = me.assemble_build(data, frame_uid, weapon_uids, skill_uids, prompt)
+	if not str(r["error"]).is_empty():
+		return r["error"]
 	_send.call(Protocol.SUBMIT_BUILD, {"frame": frame_uid, "weapons": weapon_uids, "skills": skill_uids, "prompt": prompt})
-	me.build = b
+	me.build = r["build"]
 	me.prompt = prompt
 	_mark_done()
 	return ""
+
+
+## 出撃できるかだけを調べる（状態は変えない）。確かめ方は試合側（core）と同じ
+func check_build(_player_id: int, frame_uid: int, weapon_uids: Array, skill_uids: Array, prompt: String) -> String:
+	var me: Player = get_player(my_id)
+	if me == null or not me.alive:
+		return "参加していない"
+	return me.assemble_build(data, frame_uid, weapon_uids, skill_uids, prompt)["error"]
 
 
 func choose_perk(_player_id: int, perk_id: String) -> String:

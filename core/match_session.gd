@@ -162,27 +162,21 @@ func submit_build(player_id: int, frame_uid: int, weapon_uids: Array, skill_uids
 	var p: Player = get_player(player_id)
 	if p == null or not p.alive:
 		return "そのプレイヤーは参加していない"
-	var b := Build.new()
-	b.frame = p.find_part(frame_uid)
-	for uid: Variant in weapon_uids:
-		var w: PartInstance = p.find_part(int(uid))
-		if w == null:
-			return "手持ちにない武器（uid %d）" % int(uid)
-		b.weapons.append(w)
-	for uid: Variant in skill_uids:
-		var s: PartInstance = p.find_part(int(uid))
-		if s == null:
-			return "手持ちにないスキル（uid %d）" % int(uid)
-		b.skills.append(s)
-	var err: String = b.validate(data, p.extra_weapon_slots(data), p.extra_skill_slots(data))
-	if not err.is_empty():
-		return err
-	if prompt.length() > p.prompt_max_chars(data):
-		return "プロンプトが長すぎる（%d / %d 文字）" % [prompt.length(), p.prompt_max_chars(data)]
-	p.build = b
+	var r: Dictionary = p.assemble_build(data, frame_uid, weapon_uids, skill_uids, prompt)
+	if not str(r["error"]).is_empty():
+		return r["error"]
+	p.build = r["build"]
 	p.prompt = prompt
 	p.done_this_phase = true
 	return ""
+
+
+## 出撃できるかだけを調べる（状態は変えない）。組み立て画面が、押す前に問題を見せるのに使う
+func check_build(player_id: int, frame_uid: int, weapon_uids: Array, skill_uids: Array, prompt: String) -> String:
+	var p: Player = get_player(player_id)
+	if p == null or not p.alive:
+		return "そのプレイヤーは参加していない"
+	return p.assemble_build(data, frame_uid, weapon_uids, skill_uids, prompt)["error"]
 
 
 ## 組み立てを締め切ってバトルを始める。決めていない人は、前の機体があればそのまま、なければ CPU の判断で組む

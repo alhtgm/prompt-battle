@@ -8,6 +8,8 @@ const Look := preload("res://view/look.gd")
 const PostOverlay := preload("res://view/post_overlay.gd")
 
 const LOG_LINES: int = 6
+## 頭上の文字どうしの最小のすき間（ピクセル）
+const BUBBLE_GAP: float = 4.0
 const COL_TEXT := Color(0.9, 0.87, 0.8)
 const COL_DIM := Color(0.62, 0.6, 0.55)
 const SIDE_COLORS: Array[Color] = [Color(0.45, 0.78, 1.0), Color(1.0, 0.62, 0.25)]
@@ -86,8 +88,8 @@ func build_ui() -> void:
 		side_bars.append(bar)
 		side_intents.append(_label(p, "", 18, COL_TEXT))
 		side_says.append(_label(p, "", 20, Color(1.0, 0.92, 0.6)))
-		var pl: Label = _label(p, "", 14, COL_DIM)
-		pl.custom_minimum_size = Vector2(300, 0)
+		var pl: Label = _label(p, "", 16, COL_DIM)
+		pl.custom_minimum_size = Vector2(340, 0)
 		pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		side_prompts.append(pl)
 
@@ -135,6 +137,20 @@ func _place_bubbles() -> void:
 		b.reset_size()
 		var at: Vector2 = arena.camera.unproject_position(p) * float(Look.PIXEL_SHRINK)
 		b.position = at - Vector2(b.size.x * 0.5, b.size.y)
+	_separate_bubbles()
+
+
+## 2機が近いと頭上の文字が重なるので、重なった分だけ上にある方をさらに上へずらす
+func _separate_bubbles() -> void:
+	if not (bubbles[0].visible and bubbles[1].visible):
+		return
+	var r0 := Rect2(bubbles[0].position, bubbles[0].size).grow(BUBBLE_GAP * 0.5)
+	var r1 := Rect2(bubbles[1].position, bubbles[1].size).grow(BUBBLE_GAP * 0.5)
+	if not r0.intersects(r1):
+		return
+	var upper: Label = bubbles[0] if r0.position.y <= r1.position.y else bubbles[1]
+	var lower: Label = bubbles[1] if upper == bubbles[0] else bubbles[0]
+	upper.position.y = lower.position.y - upper.size.y - BUBBLE_GAP
 
 
 func set_speed(x: float) -> void:

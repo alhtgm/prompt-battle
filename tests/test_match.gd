@@ -211,6 +211,12 @@ func test_human_player_flow() -> void:
 		"枠を超える武器は付けられない")
 	check(not s.submit_build(0, frame_uid, [weapon_uid], [], "あ".repeat(121)).is_empty(), "121文字のプロンプトは長すぎる")
 	var skills: Array = [skill_uid] if data.get_part(me.hand[0].def_id).skill_slots > 0 else []
+	# 出撃できるかの確かめ（組み立て画面が使う）：答えは submit_build と同じで、状態は変えない
+	check_eq(s.check_build(0, frame_uid, [weapon_uid, weapon_uid, weapon_uid, weapon_uid], [], ""),
+		s.submit_build(0, frame_uid, [weapon_uid, weapon_uid, weapon_uid, weapon_uid], [], ""), "確かめと出撃で同じ答え")
+	check(s.check_build(0, frame_uid, [999999], [], "").contains("手持ちにない"), "手持ちにないパーツは確かめでも見つかる")
+	check_eq(s.check_build(0, frame_uid, [weapon_uid], skills, "突撃しろ"), "", "正しい機体なら確かめも通る")
+	check(me.build == null and not me.done_this_phase, "確かめただけでは機体も決定も変わらない")
 	check_eq(s.submit_build(0, frame_uid, [weapon_uid], skills, "突撃しろ"), "", "正しい機体なら組める")
 
 	# 制限時間がたつと自動で締め切られる
