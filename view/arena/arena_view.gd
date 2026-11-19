@@ -174,6 +174,9 @@ func _spawn_sparks() -> void:
 		var e: Dictionary = sim.log[_log_seen]
 		_log_seen += 1
 		var t: String = e["type"]
+		if t == "over" and str(e.get("reason", "")) == "destroyed":
+			_shake = maxf(_shake, Look.EXPLOSION_SHAKE)  # 機体の爆発（爆発そのものは robot_view が出す）
+			continue
 		if t != "hit" and t != "flip" and t != "fall":
 			continue
 		var r: Variant = sim.robots[int(e["robot"])]

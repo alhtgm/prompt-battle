@@ -7,6 +7,7 @@ const Grime := preload("res://view/grime.gd")
 const Look := preload("res://view/look.gd")
 const PartModels := preload("res://view/arena/part_models.gd")
 const ShieldView := preload("res://view/arena/shield_view.gd")
+const ExplosionView := preload("res://view/arena/explosion_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
@@ -25,8 +26,12 @@ var aura: MeshInstance3D
 var shield: Node3D
 ## どのパーツをモデルで描いたか（テストと確認用）。false は仮の箱
 var used_models: Dictionary = {"frame": false, "weapons": [], "skills": []}
+## 壊されたときの爆発（壊される前は null）
+var explosion: Node3D = null
 var _fell_time: float = 0.0
 var _roll: float = 0.0
+var _top: float = 1.0
+var _size: float = 1.8
 
 
 ## 機体の形を作る。build は Build、color は陣営の地の色、glow は陣営の光る目印の色、
@@ -42,6 +47,8 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 	var length: float = dims["length"]
 	var width: float = dims["width"]
 	var top: float = dims["top"]
+	_top = top
+	_size = robot_radius * 2.0
 	used_models["frame"] = dims["model"]
 	# 陣営の目印：箱の車体は前の光る帯。モデルは形がいろいろで帯が浮くので、足もとの光る輪にする
 	if dims["model"]:
@@ -55,6 +62,7 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 		ring.material_override = Grime.material(glow, 0.0, 0.5, 1.0, glow)
 		ring.scale = Vector3(1.0, 0.2, 1.0)
 		ring.position.y = 0.03
+		ring.set_meta("debris", false)  # 爆発しても部品として飛ばさず、消すだけ
 		body.add_child(ring)
 	else:
 		_box(Vector3(0.08, 0.14, width * 0.8), Vector3(length * 0.5 + 0.02, top * 0.6, 0),
@@ -150,8 +158,16 @@ func sync(r: Variant, delta: float) -> void:
 			shield_left = maxf(shield_left, s.active_t / maxf(0.001, s.def.get_fixed("duration_sec", 1.0)))
 		else:
 			active = true
-	aura.visible = active and not r.fell
-	shield.update(shield_left > 0.0 and not r.fell, shield_left, delta)
+	# HPが尽きたら爆発して部品が散らばる（穴に落ちたときは爆発しない）
+	var destroyed: bool = r.hp <= 0.0 and not r.fell
+	if destroyed and explosion == null:
+		explosion = ExplosionView.new()
+		add_child(explosion)
+		explosion.start(body, Vector3(0, _top * 0.5, 0), _size)
+	if explosion != null:
+		explosion.update(delta)
+	aura.visible = active and not r.fell and not destroyed
+	shield.update(shield_left > 0.0 and not r.fell and not destroyed, shield_left, delta)
 	label.text = r.name if r.say.is_empty() else "%s「%s」" % [r.name, r.say]
 
 

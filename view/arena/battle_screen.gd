@@ -181,8 +181,10 @@ func refresh() -> void:
 		s.round_no, spectating, sim.now(), sim.time_left(), main.battle_speed, main.agents.brain_status_text()]
 	if sim.over:
 		var w: int = int(sim.result["winner"])
-		header.text += "\n決着：%s（%s）・ほかの試合を待っています" % [
-			"引き分け" if w < 0 else "%s の勝ち" % names[w], UiText.REASON_LABELS.get(sim.result["reason"], "")]
+		var all_over: bool = float(s.get("battle_end_left")) >= 0.0 if "battle_end_left" in s else false
+		header.text += "\n決着：%s（%s）・%s" % [
+			"引き分け" if w < 0 else "%s の勝ち" % names[w], UiText.REASON_LABELS.get(sim.result["reason"], ""),
+			"まもなく結果へ" if all_over else "ほかの試合を待っています"]
 	for i: int in 2:
 		var r: Variant = sim.robots[i]
 		var state: String = "穴に落ちた" if r.fell else ("動けない！" if r.stun > 0.0 else UiText.INTENT_LABELS.get(r.intent, r.intent))

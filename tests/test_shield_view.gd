@@ -23,6 +23,7 @@ class FakeRobot:
 	var th: float = 0.0
 	var stun: float = 0.0
 	var fell: bool = false
+	var hp: float = 100.0
 	var name: String = "テスト"
 	var say: String = ""
 	var skills: Array = []

@@ -49,6 +49,8 @@ var battles: Array[Battle] = []
 var history: Array[Dictionary] = []
 ## 今の段階の残り時間（組み立ての段階だけ使う）
 var phase_time_left: float = 0.0
+## 3試合とも決着してから、ラウンド結果へ切り替えるまでの残り秒数（決着前は -1）
+var battle_end_left: float = -1.0
 
 var _rng: Rng
 var _agents: RefCounted
@@ -216,10 +218,16 @@ func update(delta: float) -> void:
 				_accum -= dt
 				steps += 1
 			if _all_battles_over():
-				_finish_battles()
+				# 決着してすぐには切り替えず、少し余韻を残す（爆発や勝ち負けを見せる）
+				if battle_end_left < 0.0:
+					battle_end_left = float(data.rule("round.battle_end_delay_sec"))
+				else:
+					battle_end_left -= delta
+				if battle_end_left <= 0.0:
+					_finish_battles()
 
 
-## 3試合とも決着まで一気に進める（画面なしの試合用）
+## 3試合とも決着まで一気に進める（画面なしの試合用。「最後まで飛ばす」もこれで、余韻は待たない）
 func run_battles_to_end() -> void:
 	if phase != PHASE_BATTLE:
 		return
@@ -328,6 +336,7 @@ func _start_battles() -> void:
 	if int(pr["leftover"]) >= 0 and not _ghost.is_empty():
 		_add_battle(int(pr["leftover"]), GHOST_ID)
 	_accum = 0.0
+	battle_end_left = -1.0
 	phase = PHASE_BATTLE
 
 

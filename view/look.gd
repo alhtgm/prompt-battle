@@ -80,6 +80,30 @@ const SHIELD_LOW_FRAC: float = 0.3
 const SHIELD_INTENSITY: float = 1.0
 const SHIELD_LIGHT_ENERGY: float = 1.2
 
+# ---- 機体が壊されたときの爆発（view/arena/explosion_view.gd） ----
+const EXPLOSION_FIRE := Color(1.0, 0.55, 0.15)
+const EXPLOSION_CORE := Color(1.0, 0.95, 0.75)
+const EXPLOSION_SMOKE := Color(0.12, 0.11, 0.1)
+## 部品が外へ飛ぶ速さ・上へ飛ぶ速さ（m/秒の範囲）、回る速さ（ラジアン/秒）
+const EXPLOSION_SPEED_MIN: float = 3.0
+const EXPLOSION_SPEED_MAX: float = 9.0
+const EXPLOSION_UP_MIN: float = 4.0
+const EXPLOSION_UP_MAX: float = 10.0
+const EXPLOSION_SPIN: float = 18.0
+## 部品にかかる重力、床で跳ねたときに残る勢い（上下）と、こすれて残る勢い（水平と回転）
+const EXPLOSION_GRAVITY: float = 20.0
+const EXPLOSION_BOUNCE: float = 0.35
+const EXPLOSION_FRICTION: float = 0.6
+## 火の玉の大きさ（機体の大きさの何倍か）と消えるまでの秒数、閃光の強さ
+const EXPLOSION_FIREBALL_SIZE: float = 1.2
+const EXPLOSION_FIREBALL_SEC: float = 0.6
+const EXPLOSION_FLASH_ENERGY: float = 9.0
+## 床を広がる衝撃の輪の最後の半径（m）と秒数
+const EXPLOSION_RING_RADIUS: float = 5.0
+const EXPLOSION_RING_SEC: float = 0.35
+## 爆発で画面を揺らす強さ
+const EXPLOSION_SHAKE: float = 0.9
+
 # ---- 演出 ----
 const SPARK_COLOR := Color(1.0, 0.75, 0.3)
 ## この量以上のダメージで画面を揺らす
