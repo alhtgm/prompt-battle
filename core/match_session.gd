@@ -313,12 +313,14 @@ func _start_round() -> void:
 	round_no += 1
 	for p: Player in players:
 		p.done_this_phase = false
-		p.new_parts = []
 	phase_time_left = float(data.rule("round.build_time_limit_sec"))
 	phase = PHASE_BUILD
 
 
 func _start_battles() -> void:
+	# 配られたパーツの記録は、組み立ての画面で NEW を出し終えたら消す（画面用の記録で、計算には使わない）
+	for p: Player in players:
+		p.new_parts = []
 	var ids: Array[int] = []
 	for p: Player in alive_players():
 		ids.append(p.id)
@@ -366,7 +368,7 @@ func _add_battle(a: int, b: int) -> void:
 	var brains: Array = []
 	for side: int in 2:
 		brains.append(_agents.make_brain(humans[side], _rng.fork("round/%d/brain/%d/%d" % [round_no, k, side]),
-			ids[side]))
+			ids[side], humans[1 - side]))
 	bt.prompts = prompts.duplicate()
 	bt.sim = BattleSim.new(data, builds, brains, prompts, names, _rng.fork("round/%d/battle/%d" % [round_no, k]))
 	battles.append(bt)

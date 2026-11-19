@@ -37,6 +37,8 @@ var use_llm: bool = true
 ## 頭脳とCPUの判断。本番の頭脳のサーバーは起動時に1回だけ立ち上げ、試合をまたいで使い回す
 var agents: DefaultAgents = null
 var _shown_phase: String = ""
+## 開発用：どの画面からでもすぐタイトルへ戻るボタン（タイトル画面と、製品の書き出しでは出さない）
+var dev_title_button: Button
 var _shown_round: int = -1
 
 
@@ -54,6 +56,7 @@ func _ready() -> void:
 	var post := PostOverlay.new()
 	layer.add_child(post)
 	post.setup(Look.SCREEN_POST)
+	_add_dev_title_button()
 	data = GameData.new()
 	if not data.load_dir():
 		push_error("data/ が読めない：\n" + "\n".join(data.errors))
@@ -102,6 +105,24 @@ func _notification(what: int) -> void:
 		if agents != null:
 			agents.shutdown()
 		leave_online()
+
+
+## 開発用のタイトルへ戻るボタンを、画面の下の真ん中（ほかの板と重ならない場所）に置く
+func _add_dev_title_button() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 11  # 画面効果の上に出す
+	add_child(layer)
+	dev_title_button = Button.new()
+	dev_title_button.text = "[開発] タイトルへ"
+	dev_title_button.add_theme_font_size_override("font_size", 14)
+	dev_title_button.modulate.a = 0.75
+	dev_title_button.focus_mode = Control.FOCUS_NONE  # 画面の操作（キーボード）の邪魔をしない
+	dev_title_button.pressed.connect(show_title)
+	dev_title_button.visible = false
+	layer.add_child(dev_title_button)
+	dev_title_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 4)
+	dev_title_button.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	dev_title_button.grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 
 func show_title() -> void:
@@ -215,3 +236,5 @@ func _show(next: Control) -> void:
 	screen.set("main", self)
 	add_child(screen)
 	screen.call("build_ui")
+	if dev_title_button != null:
+		dev_title_button.visible = OS.is_debug_build() and screen.get_script() != TitleScreen

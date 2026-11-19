@@ -67,8 +67,13 @@ func test_compact_observation_keeps_what_matters() -> void:
 
 func test_config_finds_or_explains() -> void:
 	var cfg := LlmConfig.new()
-	var ok: bool = cfg.load_config({"search_dirs": ["no_such_dir_for_test"]})
+	var ok: bool = cfg.load_config({"search_dirs": ["no_such_dir_for_test"], "external_server": false})
 	check(not ok and cfg.problem.contains("llama-server"), "見つからなければ理由が分かる")
+	var ext := LlmConfig.new()
+	check(ext.load_config({"search_dirs": ["no_such_dir_for_test"], "external_server": true, "external_label": "試し"}),
+		"外部のサーバーにつなぐなら、サーバーとモデルを探さない")
+	var server := LlmServer.new(ext)
+	check_eq(server.model_name(), "試し", "外部のサーバーの名前を表示に使う")
 	var off := LlmConfig.new()
 	check(not off.load_config({"enabled": false}) and off.problem.contains("無効"), "無効にできる")
 	check(LlmConfig.resolve_dir("~/x").ends_with("x") and not LlmConfig.resolve_dir("~/x").begins_with("~"), "~ はユーザーフォルダになる")
@@ -77,7 +82,7 @@ func test_config_finds_or_explains() -> void:
 func test_brain_falls_back_to_mock_when_server_unusable() -> void:
 	# サーバーが見つからない設定で作る。本番の頭脳の中の仮の頭脳で、いつもどおり試合が進む
 	var cfg := LlmConfig.new()
-	cfg.load_config({"search_dirs": ["no_such_dir_for_test"]})
+	cfg.load_config({"search_dirs": ["no_such_dir_for_test"], "external_server": false})
 	var server := LlmServer.new(cfg)
 	server.start()
 	check(server.is_failed(), "サーバーは使えない状態になる")
@@ -94,6 +99,43 @@ func test_brain_falls_back_to_mock_when_server_unusable() -> void:
 				intents += 1
 	check(intents > 0, "仮の頭脳で方針が届く（%d 回）" % intents)
 	check_eq(brain.stats["requests"], 0, "サーバーには問い合わせない")
+
+
+func test_history_records_sent_raw_and_answer() -> void:
+	# 開発用の記録：届いた答えが、送った戦況と同じ行に残る（サーバーは動かさず、届いた答えを直接渡す）
+	var cfg := LlmConfig.new()
+	cfg.load_config({"search_dirs": ["no_such_dir_for_test"], "external_server": false})
+	var brain := LlmBrain.new(LlmServer.new(cfg))
+	brain.begin("突撃しろ", BUILD, {})
+	var HttpJob := preload("res://agent/http_job.gd")
+	for content: String in ['{"intent":"charge","skill":0,"say":"いくぞ"}', "えっと"]:
+		brain.history.append({"asked_at": 1.0, "answered_at": -1.0, "ms": 0, "sent": "戦況", "raw": "", "answer": {}, "error": ""})
+		var job := HttpJob.new()
+		job.state = HttpJob.State.DONE
+		job.status_code = 200
+		job.body = JSON.stringify({"choices": [{"message": {"content": content}}]}).to_utf8_buffer()
+		brain._take_result(job)
+	check_eq(brain.history[0]["answer"], {"intent": "charge", "skill": 0, "say": "いくぞ"}, "読めた答えが残る")
+	check_eq(brain.history[0]["raw"], '{"intent":"charge","skill":0,"say":"いくぞ"}', "生の答えが残る")
+	check(brain.history[0]["answered_at"] >= 0.0, "答えが届いた時間が入る")
+	check_eq(brain.history[1]["error"], "壊れた答え", "壊れた答えはそうと分かる")
+	brain.begin("", BUILD, {})
+	check(brain.history.is_empty(), "次の試合で記録は空に戻る")
+
+
+func test_cpu_facing_human_uses_llm_only_when_configured() -> void:
+	# サーバーは起動しない（外部のサーバーにつなぐ設定で作るだけ。使えない状態にはならない）
+	for on: bool in [true, false]:
+		var cfg := LlmConfig.new()
+		cfg.load_config({"external_server": true, "cpu_opponent": on})
+		var agents := DefaultAgents.new()
+		agents.llm_server = LlmServer.new(cfg)
+		check(agents.make_brain(true, Rng.new(1), 0, false) is LlmBrain, "人間はいつも本番の頭脳（cpu_opponent=%s）" % on)
+		check_eq(agents.make_brain(false, Rng.new(2), 3, true) is LlmBrain, on, "人間と戦うCPUは設定しだい（%s）" % on)
+		check(agents.make_brain(false, Rng.new(3), 4, false) is MockBrain, "ほかの試合のCPUは仮の頭脳（%s）" % on)
+		check_eq(agents.llm_brains.has(3), on, "記録を見られるのは本番の頭脳の機体だけ（%s）" % on)
+		agents.make_brain(false, Rng.new(4), 3, false)
+		check(not agents.llm_brains.has(3), "次のラウンドで仮の頭脳になれば、前の記録は外れる（%s）" % on)
 
 
 func test_default_agents_without_llm_use_mock() -> void:

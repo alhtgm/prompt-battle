@@ -22,7 +22,7 @@ var alive: bool = true
 ## 最終順位（決まるまで 0）
 var place: int = 0
 var eliminated_round: int = 0
-## 今のラウンドで配られたパーツと、パークの候補（画面用）
+## 直前の配布で配られたパーツ（パーク選びと組み立ての画面で NEW を出す。バトルが始まると空になる）と、パークの候補（画面用）
 var new_parts: Array[PartInstance] = []
 var perk_choices: Array[String] = []
 ## 今の段階の操作を済ませたか（人間用）

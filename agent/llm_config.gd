@@ -2,6 +2,7 @@
 extends RefCounted
 
 const PATH: String = "res://data/llm.json"
+const LOCAL_PATH: String = "res://data/llm.local.json"
 
 var values: Dictionary = {}
 ## 見つかったサーバーとモデルの絶対パス（見つからなければ空）
@@ -19,6 +20,11 @@ func load_config(override: Dictionary = {}) -> bool:
 		problem = "data/llm.json が読めない"
 		return false
 	values = parsed
+	# 自分のPCだけの差し替え（Git に入れない）。測定ツールなどの override のほうが強い
+	var local: Variant = JSON.parse_string(FileAccess.get_file_as_string(LOCAL_PATH)) \
+		if FileAccess.file_exists(LOCAL_PATH) else null
+	if local is Dictionary:
+		values.merge(local, true)
 	values.merge(override, true)
 	for key: String in ["search_dirs", "server_exe", "model", "host", "port", "ctx_size", "threads",
 			"temperature", "max_tokens", "say_max_chars", "startup_timeout_sec", "request_timeout_sec",
@@ -29,6 +35,8 @@ func load_config(override: Dictionary = {}) -> bool:
 	if not bool(values.get("enabled", true)):
 		problem = "data/llm.json で無効になっている"
 		return false
+	if is_external():
+		return true  # 起動はしない。host:port で動いているサーバーにつなぐだけ
 	for dir: String in values["search_dirs"]:
 		var base: String = resolve_dir(dir)
 		var exe: String = base.path_join(str(values["server_exe"]))
@@ -46,6 +54,11 @@ func load_config(override: Dictionary = {}) -> bool:
 
 func get_value(key: String) -> Variant:
 	return values[key]
+
+
+## 自分で起動せず、すでに動いている同じ形のサーバーにつなぐか（開発中に別のLLMを試すとき）
+func is_external() -> bool:
+	return bool(values.get("external_server", false))
 
 
 ## "~/x" はユーザーフォルダから、相対パスはプロジェクトのフォルダから

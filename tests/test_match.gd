@@ -151,6 +151,13 @@ func test_damage_formula() -> void:
 	check_eq(Damage.loss_damage(3, 0.5, cfg), 48, "順位3、差0.5 → 18+30=48")
 	check_eq(Damage.loss_damage(2, NAN, cfg), 12, "差が壊れていても順位の分だけ")
 	check_eq(Damage.draw_damage(4, cfg), 0, "引き分けはダメージなし（仮）")
+	# 内訳（画面で見せる用）は、合計がダメージと一致する
+	check_eq(Damage.loss_parts(3, 0.5, cfg), {"rank": 18.0, "margin": 30.0}, "内訳：順位の分18、差の分30")
+	for rank: int in range(1, 7):
+		for m: float in [0.0, 0.123, 0.5, 0.77, 1.0, 1.5]:
+			var parts: Dictionary = Damage.loss_parts(rank, m, cfg)
+			check_eq(maxi(0, roundi(float(parts["rank"]) + float(parts["margin"]))), Damage.loss_damage(rank, m, cfg),
+				"内訳の合計がダメージと一致（順位%d、差%.3f）" % [rank, m])
 
 
 func test_loot_and_perks() -> void:
