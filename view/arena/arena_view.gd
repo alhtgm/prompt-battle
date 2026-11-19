@@ -174,6 +174,9 @@ func _spawn_sparks() -> void:
 		var e: Dictionary = sim.log[_log_seen]
 		_log_seen += 1
 		var t: String = e["type"]
+		if t == "self_destruct":
+			_shake = maxf(_shake, Look.SELF_DESTRUCT_SHAKE)  # 自爆（爆発そのものは robot_view が出す）
+			continue
 		if t == "over" and str(e.get("reason", "")) == "destroyed":
 			_shake = maxf(_shake, Look.EXPLOSION_SHAKE)  # 機体の爆発（爆発そのものは robot_view が出す）
 			continue
@@ -186,7 +189,8 @@ func _spawn_sparks() -> void:
 			robot_views[int(e["robot"])].on_hit(Vector3(by.x, 0.0, by.z))
 		var big: bool = t != "hit" or float(e.get("damage", 0.0)) >= Look.SHAKE_DAMAGE
 		if big:
-			_shake = maxf(_shake, Look.SHAKE_AMOUNT * (1.6 if t == "fall" else 1.0))
+			# 穴に落ちたときは、光の柱が吹き上がるのに合わせて大きく揺らす
+			_shake = maxf(_shake, Look.FALL_BURST_SHAKE if t == "fall" else Look.SHAKE_AMOUNT)
 		if t == "fall":
 			continue
 		_burst(Vector3(r.x, 0.9, r.z), 24 if big else 8)

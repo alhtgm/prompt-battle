@@ -63,6 +63,10 @@ var say: String = ""
 var want_skill: int = -1
 ## 相手に与えたダメージの合計
 var dealt: float = 0.0
+## 自爆装置：HPが尽きてから自爆するまでの残り秒数（-1 は動いていない）と、その長さ。自爆し終えたか
+var fuse: float = -1.0
+var fuse_total: float = 0.0
+var self_destructed: bool = false
 
 # ---- 考えるための記録 ----
 var last_request_t: float = -INF
@@ -133,6 +137,19 @@ func active_value(behavior: String, stat_name: String, fallback: float) -> float
 	return fallback
 
 
+## まだ動いていない自爆装置（なければ null）
+func self_destruct_slot() -> SkillSlot:
+	for s: SkillSlot in skills:
+		if s.def.behavior == "self_destruct" and s.charges_left != 0:
+			return s
+	return null
+
+
+## 倒れたか（HPが尽き、自爆装置の導火線も燃えていない）
+func is_down() -> bool:
+	return hp <= 0.0 and fuse < 0.0
+
+
 func add_note(text: String) -> void:
 	notes.append(text)
 	while notes.size() > 5:
@@ -151,4 +168,5 @@ func to_dict() -> Dictionary:
 		"x": x, "z": z, "th": th, "vx": vx, "vz": vz, "hp": hp, "max_hp": max_hp,
 		"stun": stun, "fell": fell, "intent": intent, "say": say, "dealt": dealt,
 		"repair_left": repair_left, "weapons": ws, "skills": ss,
+		"fuse": fuse, "self_destructed": self_destructed,
 	}

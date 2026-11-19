@@ -45,6 +45,7 @@ func _initialize() -> void:
 	_skill_shockwave()
 	_skill_emp()
 	_skill_overclock()
+	_skill_self_destruct()
 	print("書き出したモデル：%d 個（%s）" % [_written, OUT_DIR])
 	quit()
 
@@ -426,3 +427,16 @@ func _skill_overclock() -> void:
 		_add(r, _box(Vector3(0.04, 0.3, 0.38)), Vector3(-0.16 + i * 0.08, 0.3, 0), _mat(STEEL, 0.8, 0.5))
 	_add(r, _box(Vector3(0.4, 0.03, 0.05)), Vector3(0, 0.17, 0.21), _mat(DARK, 0.0, 1.0, Color(1.0, 0.25, 0.15)))
 	_save(r, "skill_overclock")
+
+
+## 自爆装置：赤い筒に黄色と黒の警告の帯、上に赤く光る警告灯
+func _skill_self_destruct() -> void:
+	var r: Node3D = _new("skill_self_destruct")
+	_add(r, _box(Vector3(0.45, 0.1, 0.45)), Vector3(0, 0.05, 0), _mat(DARK, 0.7, 0.6))
+	_add(r, _cyl(0.18, 0.18, 0.45, 10), Vector3(0, 0.32, 0), _mat(RED, 0.5, 0.6))
+	for k: int in 3:
+		var stripe: Color = YELLOW if k % 2 == 0 else Color(0.08, 0.08, 0.08)
+		_add(r, _cyl(0.19, 0.19, 0.05, 10), Vector3(0, 0.16 + k * 0.05, 0), _mat(stripe, 0.3, 0.7))
+	_add(r, _cyl(0.06, 0.06, 0.06, 6), Vector3(0, 0.58, 0), _mat(DARK, 0.8, 0.5))
+	_add(r, _sphere(0.07, 6), Vector3(0, 0.64, 0), _mat(DARK, 0.0, 1.0, Color(1.0, 0.15, 0.1)))
+	_save(r, "skill_self_destruct")

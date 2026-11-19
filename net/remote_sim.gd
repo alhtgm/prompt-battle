@@ -67,6 +67,9 @@ func apply_frame(f: Dictionary) -> void:
 		r.say = str(d["say"])
 		r.repairing = bool(d["repairing"])
 		r.repair_left = float(d["repair_left"])
+		r.fuse = float(d.get("fuse", -1.0))
+		r.fuse_total = float(d.get("fuse_total", 0.0))
+		r.self_destructed = bool(d.get("self_destructed", false))
 		var sk: Array = d.get("skills", [])
 		for k: int in mini(sk.size(), r.skills.size()):
 			r.skills[k].active_t = float(sk[k][0])

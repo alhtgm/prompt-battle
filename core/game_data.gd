@@ -37,6 +37,8 @@ const BEHAVIORS: Dictionary = {
 		"shockwave": {"stats": ["knockback"], "fixed": ["range"]},
 		"emp": {"stats": ["stun_sec"], "fixed": ["range"]},
 		"overclock": {"stats": ["damage_mult"], "fixed": ["duration_sec"]},
+		# 使わなくても、HPが0になると自動で動く（操縦士が選んでも何もしない）
+		"self_destruct": {"stats": ["blast_damage"], "fixed": ["fuse_sec", "speed_mult", "range", "knockback"]},
 	},
 }
 

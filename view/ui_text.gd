@@ -9,17 +9,19 @@ const INTENT_LABELS: Dictionary = {
 	"charge": "突撃", "flank": "回り込み", "keep_distance": "距離を取る", "retreat": "逃げる",
 	"push_to_pit": "穴へ押し込む", "go_repair": "修理に向かう", "circle": "周りを回る", "hold": "その場で待つ",
 }
-const REASON_LABELS: Dictionary = {"destroyed": "破壊", "pit": "穴落ち", "time": "時間切れ"}
+const REASON_LABELS: Dictionary = {
+	"destroyed": "破壊", "pit": "穴落ち", "time": "時間切れ", "self_destruct": "自爆で相打ち",
+}
 const STAT_LABELS: Dictionary = {
 	"hp": "HP", "speed_penalty": "速度低下", "damage": "ダメージ", "knockback": "吹き飛ばし",
 	"speed_mult": "速さ", "damage_cut": "被ダメ軽減", "heal": "回復", "stun_sec": "停止",
-	"damage_mult": "与ダメ",
+	"damage_mult": "与ダメ", "blast_damage": "自爆ダメージ",
 }
 const BEHAVIOR_LABELS: Dictionary = {
 	"grind": "触れている間削る", "strike": "叩く", "lift": "ひっくり返す", "ram": "体当たり",
 	"shoot": "撃つ", "booster": "一時的に速くなる", "shield": "一時的に被ダメ軽減",
 	"repair": "HP回復", "shockwave": "近くの相手を吹き飛ばす", "emp": "近くの相手を止める",
-	"overclock": "一時的に与ダメ増",
+	"overclock": "一時的に与ダメ増", "self_destruct": "HP0で突撃して自爆",
 }
 
 
@@ -37,18 +39,20 @@ const BEHAVIOR_DESCRIPTIONS: Dictionary = {
 	"shockwave": "近くの相手をまとめて吹き飛ばす。穴へ押し出すのにも使える。",
 	"emp": "近くの相手を一定時間止める。",
 	"overclock": "一定時間、与えるダメージが増える。",
+	"self_destruct": "使わなくても動く。HPが0になると、速くなって相手に突っ込み、少しあとに自爆して周りに大ダメージ。自爆で相手を壊せば引き分けに持ち込める。突っ込んでいる間はダメージを受けない。",
 }
 ## 抽選しない固定値の名前
 const FIXED_LABELS: Dictionary = {
 	"mass": "重さ", "turn_rate_deg": "曲がる速さ", "cooldown_sec": "使える間隔", "arc_deg": "当たる角度",
 	"reach": "届く距離", "range": "射程", "ammo": "弾数", "stun_sec": "止める時間", "min_speed": "必要な速さ",
-	"duration_sec": "効果時間", "charges": "使える回数",
+	"duration_sec": "効果時間", "charges": "使える回数", "fuse_sec": "自爆まで", "speed_mult": "突撃の速さ",
+	"knockback": "吹き飛ばし",
 }
 ## 吹き出しに出す固定値（種類ごと、この順で）。値が 0 のものは出さない（charges の 0 は「無制限」として出す）
 const FIXED_SHOWN: Dictionary = {
 	"frame": ["mass", "turn_rate_deg"],
 	"weapon": ["cooldown_sec", "range", "ammo", "stun_sec", "min_speed"],
-	"skill": ["duration_sec", "cooldown_sec", "range", "charges"],
+	"skill": ["fuse_sec", "speed_mult", "duration_sec", "cooldown_sec", "range", "charges"],
 }
 ## 小さいほど良いステータス（吹き出しで、抽選の当たり外れの色を逆にする）
 const LOWER_IS_BETTER: Array[String] = ["speed_penalty"]
@@ -58,7 +62,7 @@ const LOWER_IS_BETTER: Array[String] = ["speed_penalty"]
 static func fixed_text(key: String, v: float) -> String:
 	var label: String = FIXED_LABELS.get(key, key)
 	match key:
-		"cooldown_sec", "duration_sec", "stun_sec":
+		"cooldown_sec", "duration_sec", "stun_sec", "fuse_sec":
 			return "%s %.1f秒" % [label, v]
 		"turn_rate_deg", "arc_deg":
 			return "%s %d°" % [label, roundi(v)]
@@ -66,6 +70,8 @@ static func fixed_text(key: String, v: float) -> String:
 			return "%s %d発" % [label, roundi(v)]
 		"charges":
 			return "%s %s" % [label, "無制限" if v <= 0.0 else "%d回" % roundi(v)]
+		"speed_mult":
+			return "%s ×%.1f" % [label, v]
 		"mass":
 			return "%s ×%.1f" % [label, v]
 	return "%s %.1f" % [label, v]
@@ -110,7 +116,7 @@ static func stat_text(stat_name: String, v: float) -> String:
 			return "%s ×%.2f" % [label, v]
 		"stun_sec":
 			return "%s %.1f秒" % [label, v]
-		"hp", "heal":
+		"hp", "heal", "blast_damage":
 			return "%s %d" % [label, roundi(v)]
 	return "%s %.1f" % [label, v]
 
@@ -149,6 +155,10 @@ static func event_line(e: Dictionary, names: Array) -> String:
 			return t + "%s がひっくり返された！" % who
 		"skill":
 			return t + "%s が %s を使った" % [who, e["skill"]]
+		"fuse":
+			return t + "%s の %s が作動！ 相手に突っ込む" % [who, e["skill"]]
+		"self_destruct":
+			return t + ("%s が自爆！ %d ダメージ" % [who, roundi(e["damage"])] if e["hit"] else "%s が自爆したが、届かなかった" % who)
 		"fall":
 			return t + "%s が穴に落ちた！" % who
 		"repair":

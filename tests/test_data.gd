@@ -24,7 +24,7 @@ func test_part_counts_match_design() -> void:
 	var data := _load()
 	check_eq(data.defs_of_kind(GameData.KIND_FRAME).size(), 6, "フレームの型の数")
 	check_eq(data.defs_of_kind(GameData.KIND_WEAPON).size(), 8, "武器の型の数")
-	check_eq(data.defs_of_kind(GameData.KIND_SKILL).size(), 6, "スキルの型の数")
+	check_eq(data.defs_of_kind(GameData.KIND_SKILL).size(), 7, "スキルの型の数（自爆装置を含む）")
 
 
 func test_rules_match_design() -> void:

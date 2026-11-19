@@ -14,9 +14,13 @@ const Observation := preload("res://core/observation.gd")
 const REASON_DESTROYED: String = "destroyed"
 const REASON_PIT: String = "pit"
 const REASON_TIME: String = "time"
+## 自爆装置の自爆で相手を道連れにした（引き分け）
+const REASON_SELF_DESTRUCT: String = "self_destruct"
 
 ## 頭脳が壊れた答えを返したときの一言
 const CONFUSED_SAY: String = "えっと…"
+## 自爆装置が動き出したときの一言
+const SELF_DESTRUCT_SAY: String = "道連れだ！"
 
 
 ## 飛んでいる弾
@@ -53,6 +57,10 @@ var _b: Dictionary = {}
 var _think_interval: float = 2.0
 var _think_min_gap: float = 0.5
 var _say_max: int = 40
+## 自爆のダメージを与えている最中（壊された相手の自爆装置には火をつけない）
+var _blasting: bool = false
+## 自爆が相手を壊したか（決着のつき方を「自爆で相打ち」にする）
+var _blast_kill: bool = false
 
 
 ## builds・brains・prompts・names はどれも2つ。brains は agent_brain.gd を継承したもの
@@ -125,6 +133,10 @@ func step() -> void:
 		_poll(i, t)  # 2. 答えが届いていれば方針を入れ替える
 	var controls: Array[Dictionary] = []
 	for i: int in 2:
+		if robots[i].fuse >= 0.0:
+			# 自爆装置の導火線が燃えている間は、操縦士の方針に関係なく相手へ突っ込む
+			robots[i].intent = "charge"
+			robots[i].want_skill = -1
 		_try_skill(i)  # 3. 実行役（スキルを含む）
 		controls.append(RobotDriver.drive(robots[i], robots[1 - i], _b))
 	for i: int in 2:
@@ -137,6 +149,8 @@ func step() -> void:
 	_update_shots()
 	for i: int in 2:
 		_hazards(i)  # 6. 修理ステーションと穴
+	for i: int in 2:
+		_fuse(i)  # 6.5 自爆装置の導火線
 	_check_over()  # 7. 決着
 	for e: Dictionary in events:
 		if e["type"] != "shot":
@@ -180,6 +194,8 @@ func _poll(i: int, t: float) -> void:
 	var answer: Variant = _brains[i].poll(t)
 	if not (answer is Dictionary) or (answer as Dictionary).is_empty():
 		return
+	if r.fuse >= 0.0 or r.self_destructed:
+		return  # 自爆装置が動き出したら、操縦士の答えはもう使わない
 	var a: Dictionary = answer
 	var intent: Variant = a.get("intent")
 	if not (intent is String) or not RobotDriver.INTENTS.has(intent):
@@ -202,6 +218,9 @@ func _try_skill(i: int) -> void:
 	if r.want_skill < 0 or r.fell or r.stun > 0.0:
 		return
 	var s: Robot.SkillSlot = r.skills[r.want_skill]
+	if s.def.behavior == "self_destruct":
+		r.want_skill = -1  # 自爆装置は自分では使えない（HPが0になると自動で動く）
+		return
 	if not s.is_ready():
 		return  # 使えるようになるまで待つ
 	var en: Robot = robots[1 - i]
@@ -255,6 +274,8 @@ func _apply_control(r: Robot, c: Dictionary) -> void:
 	if not c["aim"] and not c["reverse"] and absf(diff) > deg_to_rad(float(cfg["sharp_turn_deg"])):
 		thr *= float(cfg["sharp_turn_throttle"])
 	var sp: float = r.max_speed * r.active_value("booster", "speed_mult", 1.0) * thr
+	if r.fuse >= 0.0:
+		sp *= _fuse_speed(r)
 	if c["reverse"]:
 		sp = -sp * float(cfg["reverse_mult"])
 	var k: float = minf(1.0, float(cfg["accel"]) * dt)
@@ -426,7 +447,8 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 		attacker_i: int, discrete: bool) -> float:
 	var v: Robot = robots[victim_i]
 	var a: Robot = robots[attacker_i]
-	if amount <= 0.0 or v.fell:
+	# 導火線が燃えている機体と、自爆し終えた機体はもうダメージを受けない
+	if amount <= 0.0 or v.fell or v.fuse >= 0.0 or v.self_destructed:
 		return 0.0
 	var hit: Dictionary = _b["hit"]
 	var rel: float = absf(angle_difference(v.th, atan2(from_z - v.z, from_x - v.x)))
@@ -439,6 +461,9 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 	var dmg: float = amount * mult
 	v.hp = maxf(0.0, v.hp - dmg)
 	a.dealt += dmg
+	# HPが尽きたら、自爆装置があれば導火線に火がつく（自爆で壊されたときは道連れなのでつかない）
+	if v.hp <= 0.0 and not _blasting:
+		_arm_fuse(victim_i)
 	v.damage_since_request += dmg
 	if v.damage_since_request >= float(_b["replan"]["big_hit_damage"]):
 		v.trigger = "大きく被弾"
@@ -492,6 +517,75 @@ func _hazards(i: int) -> void:
 	r.enemy_was_near_pit = en_near
 
 
+# ---- 6.5 自爆装置 ----
+
+## 自爆装置の導火線に火をつける。速くなって相手へ突っ込み、ダメージを受けなくなる
+func _arm_fuse(i: int) -> void:
+	var r: Robot = robots[i]
+	var s: Robot.SkillSlot = r.self_destruct_slot()
+	if s == null or r.fell or r.fuse >= 0.0:
+		return
+	if s.charges_left > 0:
+		s.charges_left -= 1
+	r.fuse = maxf(dt, s.def.get_fixed("fuse_sec"))
+	r.fuse_total = r.fuse
+	s.active_t = r.fuse
+	r.stun = 0.0
+	r.intent = "charge"
+	r.say = SELF_DESTRUCT_SAY
+	events.append({"type": "fuse", "robot": i, "skill": s.def.name})
+
+
+## 導火線を進め、燃え尽きたら（または時間切れなら）自爆する
+func _fuse(i: int) -> void:
+	var r: Robot = robots[i]
+	if r.fuse < 0.0 or r.fell:
+		return
+	r.fuse -= dt
+	if r.fuse <= 0.0 or tick >= time_limit_ticks:
+		_explode(i)
+
+
+## 自爆する。範囲内の相手に大きなダメージと吹き飛ばし。自爆した機体は倒れる
+func _explode(i: int) -> void:
+	var r: Robot = robots[i]
+	var en: Robot = robots[1 - i]
+	var def: GameData.PartDef = null
+	var inst: PartInstance = null
+	for s: Robot.SkillSlot in r.skills:
+		if s.def.behavior == "self_destruct":
+			def = s.def
+			inst = s.inst
+			s.active_t = 0.0
+	r.fuse = -1.0
+	r.self_destructed = true
+	r.vx = 0.0
+	r.vz = 0.0
+	if def == null:
+		return
+	var rng_m: float = def.get_fixed("range")
+	var d := Vector2(en.x - r.x, en.z - r.z)
+	var hit: bool = not en.fell and not en.is_down() and d.length() <= rng_m + r.radius + en.radius
+	var dmg: float = 0.0
+	if hit:
+		_blasting = true
+		dmg = _damage(1 - i, inst.get_stat("blast_damage"), r.x, r.z, def.name, i, true)
+		_blasting = false
+		var n: Vector2 = d.normalized() if d.length() > 0.001 else Vector2(cos(en.th), sin(en.th))
+		_knock(en, n.x, n.y, def.get_fixed("knockback"))
+	if hit and en.is_down():
+		_blast_kill = true
+	events.append({"type": "self_destruct", "robot": i, "hit": hit, "damage": dmg, "range": rng_m})
+
+
+## 導火線が燃えている間の速さの倍率
+func _fuse_speed(r: Robot) -> float:
+	for s: Robot.SkillSlot in r.skills:
+		if s.def.behavior == "self_destruct":
+			return maxf(0.0, s.def.get_fixed("speed_mult", 1.0))
+	return 1.0
+
+
 # ---- 7. 決着 ----
 
 func _check_over() -> void:
@@ -502,9 +596,13 @@ func _check_over() -> void:
 	if a.fell or b.fell:
 		reason = REASON_PIT
 		winner = -1 if a.fell and b.fell else (1 if a.fell else 0)
-	elif a.hp <= 0.0 or b.hp <= 0.0:
-		reason = REASON_DESTROYED
-		winner = -1 if a.hp <= 0.0 and b.hp <= 0.0 else (1 if a.hp <= 0.0 else 0)
+	elif a.fuse >= 0.0 or b.fuse >= 0.0:
+		return  # 自爆装置の導火線が燃えている間は決着しない（自爆の結果を待つ）
+	elif a.is_down() or b.is_down():
+		var both: bool = a.is_down() and b.is_down()
+		# 両方倒れていて、自爆が相手を壊したのなら、自爆による道連れ（引き分け）
+		reason = REASON_SELF_DESTRUCT if both and _blast_kill else REASON_DESTROYED
+		winner = -1 if both else (1 if a.is_down() else 0)
 	elif tick >= time_limit_ticks:
 		reason = REASON_TIME
 		var diff: float = a.hp_ratio() - b.hp_ratio()

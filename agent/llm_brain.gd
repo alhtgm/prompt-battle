@@ -22,6 +22,7 @@ const BEHAVIOR_TEXT: Dictionary = {
 	"grind": "触れている間削る", "strike": "叩く", "lift": "ひっくり返す", "ram": "体当たり", "shoot": "撃つ",
 	"booster": "一時的に速くなる", "shield": "一時的に受けるダメージが減る", "repair": "HPを回復する",
 	"shockwave": "近くの相手を吹き飛ばす", "emp": "近くの相手を止める", "overclock": "一時的に与えるダメージが増える",
+	"self_destruct": "HPが0になると自動で相手に突っ込んで自爆する。選ぶ必要はなく、選んでも何も起きない",
 }
 
 ## 壊れた答えのとき BattleSim に渡すもの（方針が不正なので、前の方針を続けて「えっと…」と言う）

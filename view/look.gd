@@ -80,6 +80,37 @@ const SHIELD_LOW_FRAC: float = 0.3
 const SHIELD_INTENSITY: float = 1.0
 const SHIELD_LIGHT_ENERGY: float = 1.2
 
+# ---- シールド以外のスキルの見た目（view/arena/skill_fx_view.gd） ----
+const BOOSTER_FLAME := Color(1.0, 0.6, 0.25)
+const BOOSTER_TRAIL := Color(0.6, 0.8, 1.0)
+## 噴射炎の長さ（m）
+const BOOSTER_FLAME_LENGTH: float = 1.1
+const OVERCLOCK_COLOR := Color(1.0, 0.2, 0.15)
+
+# ---- 穴に落ちたときの演出（view/arena/fall_burst_view.gd）。光の柱が穴から空へ吹き上がる ----
+## 光が吹き上がるまでの間（機体が沈んでいく時間）と、全体が消えるまでの秒数
+const FALL_BURST_DELAY: float = 0.35
+const FALL_BURST_SEC: float = 1.4
+## 光の柱の高さと太さ（m）、放射状に飛ぶ光の筋の数と長さ（m）
+const FALL_BURST_HEIGHT: float = 18.0
+const FALL_BURST_WIDTH: float = 1.3
+const FALL_BURST_STREAKS: int = 14
+const FALL_BURST_STREAK_LEN: float = 6.0
+## 閃光の強さと、画面を揺らす強さ
+const FALL_BURST_FLASH: float = 12.0
+const FALL_BURST_SHAKE: float = 1.1
+
+# ---- 自爆装置（view/arena/robot_view.gd の点滅と、explosion_view.gd の大きな爆発） ----
+const SELF_DESTRUCT_COLOR := Color(1.0, 0.12, 0.08)
+## 点滅の速さ（1秒に何回）：導火線に火がついた直後と、自爆の直前
+const SELF_DESTRUCT_BLINK_START_HZ: float = 2.0
+const SELF_DESTRUCT_BLINK_END_HZ: float = 16.0
+## 点滅に合わせて周りを照らす赤い光の強さ
+const SELF_DESTRUCT_LIGHT: float = 3.0
+## 自爆の爆発の大きさ（ふつうの爆発の何倍か）と、画面を揺らす強さ
+const SELF_DESTRUCT_SIZE: float = 1.8
+const SELF_DESTRUCT_SHAKE: float = 1.6
+
 # ---- 機体が壊されたときの爆発（view/arena/explosion_view.gd） ----
 const EXPLOSION_FIRE := Color(1.0, 0.55, 0.15)
 const EXPLOSION_CORE := Color(1.0, 0.95, 0.75)

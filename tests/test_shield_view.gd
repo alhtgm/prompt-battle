@@ -115,10 +115,11 @@ func test_robot_shows_shield_only_for_shield_skill() -> void:
 	shield.active_t = 2.0
 	v.sync(r, DT)
 	check_eq(v.shield.state, ShieldView.State.OPENING, "シールドが効くとバリアを張る")
-	check(not v.aura.visible, "シールドだけなら薄い光は出さない")
+	check(not v.skill_fx.booster_on, "シールドだけならブースターの炎は出さない")
 	booster.active_t = 1.0
 	v.sync(r, DT)
-	check(v.aura.visible, "ほかのスキルが効いていれば薄い光を出す")
+	check(v.skill_fx.booster_on, "ブースターが効いていれば噴射炎を出す")
+	check(v.shield.state != ShieldView.State.OFF, "ブースターと同時でもバリアは張ったまま")
 	shield.active_t = 0.0
 	booster.active_t = 0.0
 	v.sync(r, DT)

@@ -15,10 +15,13 @@ var _ring: MeshInstance3D
 var _ring_mat: StandardMaterial3D
 var _flash: OmniLight3D
 var _smolder: CPUParticles3D
+var _ring_radius: float = 5.0
 
 
-## 爆発を始める。source の中のメッシュを部品としてばらす。center は爆発の中心（この爆発から見た位置）、size は機体の大きさ（m）
-func start(source: Node3D, center: Vector3, size: float) -> void:
+## 爆発を始める。source の中のメッシュを部品としてばらす。center は爆発の中心（この爆発から見た位置）、size は機体の大きさ（m）、
+## ring_radius は床を広がる衝撃の輪の最後の半径（m。省くと決まった大きさ）
+func start(source: Node3D, center: Vector3, size: float, ring_radius: float = -1.0) -> void:
+	_ring_radius = ring_radius if ring_radius > 0.0 else Look.EXPLOSION_RING_RADIUS
 	var meshes: Array[MeshInstance3D] = []
 	_collect(source, meshes)
 	var world_center: Vector3 = to_global(center)
@@ -80,7 +83,7 @@ func update(delta: float) -> void:
 	# 衝撃の輪：床を速く広がって消える
 	var rt: float = clampf(age / Look.EXPLOSION_RING_SEC, 0.0, 1.0)
 	_ring.visible = rt < 1.0
-	_ring.scale = Vector3(1.0, 1.0, 1.0) * lerpf(0.3, Look.EXPLOSION_RING_RADIUS, 1.0 - pow(1.0 - rt, 2.0))
+	_ring.scale = Vector3(1.0, 1.0, 1.0) * lerpf(0.3, _ring_radius, 1.0 - pow(1.0 - rt, 2.0))
 	_ring_mat.albedo_color.a = 1.0 - rt
 	# 閃光：一瞬だけ強く照らす
 	_flash.light_energy = Look.EXPLOSION_FLASH_ENERGY * exp(-age * 7.0)

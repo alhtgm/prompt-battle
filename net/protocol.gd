@@ -109,6 +109,7 @@ static func battle_frame(s: RefCounted, max_log: int) -> Dictionary:
 			robots.append({
 				"x": r.x, "z": r.z, "th": r.th, "hp": r.hp, "stun": r.stun, "fell": r.fell, "intent": r.intent,
 				"say": r.say, "repairing": r.repairing, "repair_left": r.repair_left, "skills": skills, "ammo": ammo,
+				"fuse": r.fuse, "fuse_total": r.fuse_total, "self_destructed": r.self_destructed,
 			})
 		var shots: Array = []
 		for sh: Variant in sim.shots:

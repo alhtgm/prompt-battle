@@ -8,6 +8,8 @@ const Look := preload("res://view/look.gd")
 const PartModels := preload("res://view/arena/part_models.gd")
 const ShieldView := preload("res://view/arena/shield_view.gd")
 const ExplosionView := preload("res://view/arena/explosion_view.gd")
+const SkillFxView := preload("res://view/arena/skill_fx_view.gd")
+const FallBurstView := preload("res://view/arena/fall_burst_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
@@ -21,9 +23,18 @@ const FALL_SPEED: float = 6.0
 
 var body: Node3D
 var label: Label3D
-var aura: MeshInstance3D
+## ブースターとオーバークロックの見た目
+var skill_fx: Node3D
 ## バリア（シールドのスキル）の見た目
 var shield: Node3D
+## 穴に落ちたときの光の柱（落ちる前は null）
+var fall_burst: Node3D = null
+var _glow: Color = Color.WHITE
+## 自爆装置の赤い点滅の重ね塗り（点滅していなければ null）と、今点いているか
+var blink_mat: StandardMaterial3D = null
+var blink_on: bool = false
+var _blink_light: OmniLight3D = null
+var _blink_phase: float = 0.0
 ## どのパーツをモデルで描いたか（テストと確認用）。false は仮の箱
 var used_models: Dictionary = {"frame": false, "weapons": [], "skills": []}
 ## 壊されたときの爆発（壊される前は null）
@@ -104,20 +115,11 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 		_box(Vector3(0.1, 0.6, 0.1), mount * Vector3(0, 0.3, 0), Grime.material(Color(0.2, 0.2, 0.2), 0.8, 0.6, 1.0))
 		_box(Vector3(0.16, 0.12, 0.16), mount * Vector3(0, 0.65, 0),
 			Grime.material(SKILL_COLOR, 0.0, 0.5, 1.0, SKILL_COLOR))
-	# スキルが効いている間の光
-	aura = MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = robot_radius * 1.3
-	sphere.height = robot_radius * 2.0
-	aura.mesh = sphere
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(SKILL_COLOR, 0.25)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	aura.material_override = mat
-	aura.position.y = top * 0.5
-	aura.visible = false
-	add_child(aura)
+	# シールド以外の効果が続くスキル（ブースターの噴射炎、オーバークロックの赤い火花）
+	skill_fx = SkillFxView.new()
+	add_child(skill_fx)
+	skill_fx.setup(length, top, robot_radius)
+	_glow = glow
 	# バリア（シールドのスキル）。機体が裏返っても膜は立ったままにするため、body ではなくここに置く
 	shield = ShieldView.new()
 	add_child(shield)
@@ -145,30 +147,109 @@ func sync(r: Variant, delta: float) -> void:
 	body.rotation.x = _roll
 	# 穴に落ちたら沈んで小さくなる
 	if r.fell:
+		if fall_burst == null:
+			# 穴から光の柱が吹き上がる演出。機体は沈んで縮むので、演出は落ちた場所に独立して置く
+			fall_burst = FallBurstView.new()
+			add_child(fall_burst)
+			fall_burst.top_level = true
+			fall_burst.global_position = get_parent_node_3d().to_global(Vector3(r.x, 0.0, r.z)) \
+				if get_parent_node_3d() != null else Vector3(r.x, 0.0, r.z)
+			fall_burst.setup(_glow)
+		fall_burst.update(delta)
 		_fell_time += delta
 		position.y = -FALL_SPEED * _fell_time * _fell_time
 		scale = Vector3.ONE * maxf(0.05, 1.0 - _fell_time * 0.8)
-	# シールドはバリアで、ほかのスキルは薄い光で見せる
-	var active: bool = false
+	# シールドはバリア、ブースターとオーバークロックはそれぞれの演出で見せる
+	var booster: bool = false
+	var overclock: bool = false
 	var shield_left: float = 0.0
 	for s: Variant in r.skills:
 		if s.active_t <= 0.0:
 			continue
-		if s.def.behavior == "shield":
-			shield_left = maxf(shield_left, s.active_t / maxf(0.001, s.def.get_fixed("duration_sec", 1.0)))
-		else:
-			active = true
-	# HPが尽きたら爆発して部品が散らばる（穴に落ちたときは爆発しない）
-	var destroyed: bool = r.hp <= 0.0 and not r.fell
+		match s.def.behavior:
+			"shield":
+				shield_left = maxf(shield_left, s.active_t / maxf(0.001, s.def.get_fixed("duration_sec", 1.0)))
+			"booster":
+				booster = true
+			"overclock":
+				overclock = true
+	# 自爆装置の導火線が燃えている間は、赤く点滅し、自爆が近づくほど速くなる
+	var fuse: float = float(r.get("fuse")) if "fuse" in r else -1.0
+	var fuse_total: float = float(r.get("fuse_total")) if "fuse_total" in r else 0.0
+	_update_fuse_blink(fuse, fuse_total, delta)
+	# HPが尽きたら爆発して部品が散らばる（穴に落ちたときは爆発しない。導火線が燃えている間はまだ）
+	var destroyed: bool = r.hp <= 0.0 and not r.fell and fuse < 0.0
 	if destroyed and explosion == null:
+		_clear_blink()
 		explosion = ExplosionView.new()
 		add_child(explosion)
-		explosion.start(body, Vector3(0, _top * 0.5, 0), _size)
+		var self_destructed: bool = bool(r.get("self_destructed")) if "self_destructed" in r else false
+		if self_destructed:
+			# 自爆：ふつうの爆発より大きく、衝撃の輪は自爆の届く範囲まで広がる
+			explosion.start(body, Vector3(0, _top * 0.5, 0), _size * Look.SELF_DESTRUCT_SIZE, _blast_range(r))
+		else:
+			explosion.start(body, Vector3(0, _top * 0.5, 0), _size)
 	if explosion != null:
 		explosion.update(delta)
-	aura.visible = active and not r.fell and not destroyed
+	var alive: bool = not r.fell and not destroyed
+	skill_fx.update(booster and alive, overclock and alive, delta)
 	shield.update(shield_left > 0.0 and not r.fell and not destroyed, shield_left, delta)
 	label.text = r.name if r.say.is_empty() else "%s「%s」" % [r.name, r.say]
+
+
+## 導火線が燃えている間の赤い点滅。最初はゆっくり、自爆の直前はとても速く点滅する
+func _update_fuse_blink(fuse: float, fuse_total: float, delta: float) -> void:
+	if fuse < 0.0:
+		if blink_mat != null:
+			_clear_blink()
+		return
+	if blink_mat == null:
+		# 機体のすべての部品に、赤く光る重ね塗りをかける
+		blink_mat = StandardMaterial3D.new()
+		blink_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		blink_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		blink_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		blink_mat.albedo_color = Color(Look.SELF_DESTRUCT_COLOR, 0.0)
+		_set_overlay(body, blink_mat)
+		_blink_light = OmniLight3D.new()
+		_blink_light.light_color = Look.SELF_DESTRUCT_COLOR
+		_blink_light.omni_range = _size * 2.5
+		_blink_light.position.y = _top * 0.7
+		add_child(_blink_light)
+		_blink_phase = 0.0
+	var p: float = clampf(1.0 - fuse / maxf(0.001, fuse_total), 0.0, 1.0)
+	var hz: float = lerpf(Look.SELF_DESTRUCT_BLINK_START_HZ, Look.SELF_DESTRUCT_BLINK_END_HZ, p * p)
+	_blink_phase += hz * delta
+	blink_on = fmod(_blink_phase, 1.0) < 0.5
+	# 点いている間は強く赤く、自爆が近いほど消えている間も赤みが残る
+	var a: float = (0.85 if blink_on else 0.12 * p)
+	blink_mat.albedo_color = Color(Look.SELF_DESTRUCT_COLOR, a)
+	_blink_light.light_energy = (Look.SELF_DESTRUCT_LIGHT * (0.6 + 0.6 * p)) if blink_on else 0.0
+
+
+func _clear_blink() -> void:
+	if blink_mat != null:
+		_set_overlay(body, null)
+		blink_mat = null
+	if _blink_light != null:
+		_blink_light.queue_free()
+		_blink_light = null
+	blink_on = false
+
+
+func _set_overlay(n: Node, mat: Material) -> void:
+	for c: Node in n.get_children():
+		if c is MeshInstance3D and c.get_meta("debris", true):
+			(c as MeshInstance3D).material_overlay = mat
+		_set_overlay(c, mat)
+
+
+## 自爆が届く範囲（m）。わからなければ機体の大きさの3倍
+func _blast_range(r: Variant) -> float:
+	for s: Variant in r.skills:
+		if s.def.behavior == "self_destruct":
+			return s.def.get_fixed("range") + _size
+	return _size * 3.0
 
 
 ## 被弾した（arena_view が出来事から呼ぶ）。バリアを張っていれば、攻撃が来た向きに波紋を出す
