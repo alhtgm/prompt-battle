@@ -23,6 +23,83 @@ const BEHAVIOR_LABELS: Dictionary = {
 }
 
 
+## パーツの効果の説明（吹き出しに出す）。フレームは動き方を持たないので "frame" で引く
+const BEHAVIOR_DESCRIPTIONS: Dictionary = {
+	"frame": "機体の土台。HPと重さ、曲がりやすさ、付けられる武器とスキルの数が決まる。重いほど押し合いに強いが遅くなる。",
+	"grind": "相手に触れている間、毎秒ダメージを与え続ける。張り付いて削り切る武器。",
+	"strike": "前にいる相手を叩いて、ダメージと吹き飛ばしを与える。叩いたあとは少し間が空く。",
+	"lift": "相手をすくい上げてひっくり返し、しばらく動けなくする。穴の近くで使うと強い。",
+	"ram": "勢いをつけてぶつかったときだけ効く。速く当たるほど相手を大きく吹き飛ばす。",
+	"shoot": "離れた相手に弾を撃つ。弾数に限りがあり、撃ち尽くすと使えない。",
+	"booster": "一定時間、移動が速くなる。追いかけるのにも逃げるのにも使える。",
+	"shield": "一定時間、受けるダメージを減らす。",
+	"repair": "その場でHPを回復する。使える回数に限りがある。",
+	"shockwave": "近くの相手をまとめて吹き飛ばす。穴へ押し出すのにも使える。",
+	"emp": "近くの相手を一定時間止める。",
+	"overclock": "一定時間、与えるダメージが増える。",
+}
+## 抽選しない固定値の名前
+const FIXED_LABELS: Dictionary = {
+	"mass": "重さ", "turn_rate_deg": "曲がる速さ", "cooldown_sec": "使える間隔", "arc_deg": "当たる角度",
+	"reach": "届く距離", "range": "射程", "ammo": "弾数", "stun_sec": "止める時間", "min_speed": "必要な速さ",
+	"duration_sec": "効果時間", "charges": "使える回数",
+}
+## 吹き出しに出す固定値（種類ごと、この順で）。値が 0 のものは出さない（charges の 0 は「無制限」として出す）
+const FIXED_SHOWN: Dictionary = {
+	"frame": ["mass", "turn_rate_deg"],
+	"weapon": ["cooldown_sec", "range", "ammo", "stun_sec", "min_speed"],
+	"skill": ["duration_sec", "cooldown_sec", "range", "charges"],
+}
+## 小さいほど良いステータス（吹き出しで、抽選の当たり外れの色を逆にする）
+const LOWER_IS_BETTER: Array[String] = ["speed_penalty"]
+
+
+## 固定値1つを読みやすい文字にする
+static func fixed_text(key: String, v: float) -> String:
+	var label: String = FIXED_LABELS.get(key, key)
+	match key:
+		"cooldown_sec", "duration_sec", "stun_sec":
+			return "%s %.1f秒" % [label, v]
+		"turn_rate_deg", "arc_deg":
+			return "%s %d°" % [label, roundi(v)]
+		"ammo":
+			return "%s %d発" % [label, roundi(v)]
+		"charges":
+			return "%s %s" % [label, "無制限" if v <= 0.0 else "%d回" % roundi(v)]
+		"mass":
+			return "%s ×%.1f" % [label, v]
+	return "%s %.1f" % [label, v]
+
+
+## パーツの動き方の短い名前（カードに出す）。フレームは枠の数
+static func part_tagline(data: GameData, p: PartInstance) -> String:
+	var def: GameData.PartDef = data.get_part(p.def_id)
+	if def.kind == GameData.KIND_FRAME:
+		return "武器%d・スキル%d" % [def.weapon_slots, def.skill_slots]
+	return BEHAVIOR_LABELS.get(def.behavior, def.behavior)
+
+
+## パーツの効果の説明
+static func part_description(data: GameData, p: PartInstance) -> String:
+	var def: GameData.PartDef = data.get_part(p.def_id)
+	var key: String = "frame" if def.kind == GameData.KIND_FRAME else def.behavior
+	return BEHAVIOR_DESCRIPTIONS.get(key, "")
+
+
+## 吹き出しに出す固定値の行
+static func part_fixed_lines(data: GameData, p: PartInstance) -> PackedStringArray:
+	var def: GameData.PartDef = data.get_part(p.def_id)
+	var out := PackedStringArray()
+	for key: String in FIXED_SHOWN.get(def.kind, []):
+		if not def.fixed.has(key):
+			continue
+		var v: float = def.get_fixed(key)
+		if v == 0.0 and key != "charges":
+			continue
+		out.append(fixed_text(key, v))
+	return out
+
+
 ## ステータス1つを読みやすい文字にする
 static func stat_text(stat_name: String, v: float) -> String:
 	var label: String = STAT_LABELS.get(stat_name, stat_name)

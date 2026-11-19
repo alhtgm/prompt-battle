@@ -200,6 +200,7 @@ func test_game_screens_follow_an_online_match() -> void:
 						sc.set_prompt("相手の後ろに回り込んで攻めろ")
 						sc.confirm()
 					"loot_screen.gd":
+						check(sc.fuse.visible, "通信対戦のパーク選びでは残り時間のバーが出る")
 						if not me.perk_choices.is_empty():
 							sc.pick(me.perk_choices[0])
 		if path == "final_screen.gd":
