@@ -322,3 +322,90 @@ func test_result_loot_and_final_screens() -> void:
 	check(f.headline.text.contains("%d位" % main.session.get_player(0).place), "自分の順位が出る")
 	main.queue_free()
 	await _frame()
+
+
+## スクラップの画面：組み立ての整備（解体・再抽選の結果の板）、パーク選びの解体と引き直し、使えないラウンドの表示
+func test_scrap_screens() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var main: Node = load("res://view/main.tscn").instantiate()
+	main.use_llm = false
+	tree.root.add_child(main)
+	await _frame()
+	main.start_game(777)
+	await _frame()
+	var s: Variant = main.session
+	s.finish_draft()
+	await _frame()
+	var g: Node = main.screen
+	check(_is(g, GarageScreen), "組み立ての画面")
+	check(g.scrap_label.text.contains("ラウンド目から"), "使えないラウンドは、使えるラウンドを出す")
+	for uid: Variant in g.rows:
+		check(not g.rows[uid]["scrap"].visible and not g.rows[uid]["reroll"].visible, "使えないラウンドはボタンを出さない")
+	var guard: int = 0
+	while guard < 200 and not (s.phase == "build" and s.scrap_unlocked()):
+		guard += 1
+		s.get_player(0).health = 1000.0
+		match s.phase:
+			"build": s.finish_build()
+			"battle": s.run_battles_to_end()
+			"round_result": s.finish_round_result()
+			"loot": s.finish_loot()
+		await _frame()
+	g = main.screen
+	check(_is(g, GarageScreen) and s.scrap_unlocked(), "使えるラウンドの組み立て")
+	var me: Variant = s.get_player(0)
+	me.scrap = 7
+	await _frame()
+	check(g.scrap_label.text.contains("7"), "スクラップの量が出る")
+	# 解体：チェックを外していて、機体にも付けていないパーツ
+	var target: int = -1
+	for uid: Variant in g.rows:
+		if g.rows[uid]["scrap"].visible:
+			target = int(uid)
+			break
+	check(target >= 0, "解体のボタンがあるパーツがある")
+	var before: int = me.scrap
+	g.rows[target]["scrap"].pressed.emit()
+	await _frame()
+	check(me.find_part(target) == null and me.scrap > before, "解体するとスクラップが増える")
+	check(not g.rows.has(target), "解体したパーツの行は消える")
+	# 再抽選：使っているパーツ。結果の板で新しい性能を選ぶ
+	var frame_uid: int = me.build.frame.uid
+	check(g.rows[frame_uid]["reroll"].visible and not g.rows[frame_uid]["scrap"].visible, "使っているパーツには再抽選のボタン")
+	g.rows[frame_uid]["reroll"].pressed.emit()
+	await _frame()
+	check(g.reroll_overlay.visible, "再抽選すると結果の板が出る")
+	var new_stats: Dictionary = me.pending_reroll["stats"].duplicate()
+	g.resolve_reroll(true)
+	await _frame()
+	check(not g.reroll_overlay.visible, "選ぶと板が消える")
+	for k: Variant in new_stats:
+		check_eq(me.build.frame.stats[str(k)], float(new_stats[k]), "新しい性能になる（%s）" % str(k))
+	# パーク選び
+	s.finish_build()
+	s.run_battles_to_end()
+	me.health = 1000.0
+	await _frame()
+	s.finish_round_result()
+	await _frame()
+	var l: Node = main.screen
+	check(_is(l, LootScreen), "パーク選びの画面")
+	me.scrap = 5
+	await _frame()
+	var card_count: int = l.part_cards.size()
+	var first_uid: int = l.part_cards[0].part.uid
+	l.scrap_buttons[first_uid].pressed.emit()
+	await _frame()
+	check_eq(l.part_cards.size(), card_count - 1, "配られたパーツを解体するとカードが消える")
+	check(me.find_part(first_uid) == null, "手持ちからも消える")
+	l.perk_cards[0].button_pressed = true
+	var used: int = me.perk_rerolls_used
+	l.reroll_perks_button.pressed.emit()
+	await _frame()
+	check_eq(me.perk_rerolls_used, used + 1, "引き直せる")
+	check(l.selected_perk.is_empty() and l.confirm_button.disabled, "引き直すと選んでいたパークは外れる")
+	check_eq(l.perk_cards.size(), me.perk_choices.size(), "新しい候補のカードが並ぶ")
+	for i: int in me.perk_choices.size():
+		check_eq(l.perk_cards[i].perk_id, me.perk_choices[i], "カードは新しい候補（%d）" % i)
+	main.queue_free()
+	await _frame()
