@@ -69,6 +69,30 @@ func prompt_max_chars(data: GameData) -> int:
 	return int(data.rule("round.prompt_max_chars")) + roundi(perk_add_total(data, "prompt.max_chars"))
 
 
+## 手持ちのパーツの uid から機体を組み、プロンプトと合わせて出撃できるかを調べる（状態は変えない）。
+## 返すのは {"build": 組んだ機体（問題があれば null）, "error": 問題（なければ空文字）}。
+## ひとりで遊ぶとき・通信対戦・組み立て画面の表示のすべてがこれを使い、確かめ方を1か所にまとめる
+func assemble_build(data: GameData, frame_uid: int, weapon_uids: Array, skill_uids: Array, prompt_text: String) -> Dictionary:
+	var b := Build.new()
+	b.frame = find_part(frame_uid)
+	for uid: Variant in weapon_uids:
+		var w: PartInstance = find_part(int(uid))
+		if w == null:
+			return {"build": null, "error": "手持ちにない武器（uid %d）" % int(uid)}
+		b.weapons.append(w)
+	for uid: Variant in skill_uids:
+		var s: PartInstance = find_part(int(uid))
+		if s == null:
+			return {"build": null, "error": "手持ちにないスキル（uid %d）" % int(uid)}
+		b.skills.append(s)
+	var err: String = b.validate(data, extra_weapon_slots(data), extra_skill_slots(data))
+	if not err.is_empty():
+		return {"build": null, "error": err}
+	if prompt_text.length() > prompt_max_chars(data):
+		return {"build": null, "error": "プロンプトが長すぎる（%d / %d 文字）" % [prompt_text.length(), prompt_max_chars(data)]}
+	return {"build": b, "error": ""}
+
+
 ## パークの効果をかけた、バトルで使う機体を作る（元の手持ちパーツは変えない）
 func effective_build(data: GameData) -> Build:
 	var b := Build.new()

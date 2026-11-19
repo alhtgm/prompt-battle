@@ -16,11 +16,14 @@ const PROMPT_EXAMPLES: Array = [
 	["慎重", "慎重に戦え。HPが減ったら修理に行け"],
 	["回り込み", "相手の後ろに回り込んで攻めろ"],
 ]
-
 var frame_uid: int = -1
 var weapon_uids: Array[int] = []
 var skill_uids: Array[int] = []
 var _boxes: Dictionary = {}
+## チェックボックスの uid → パーツの種類
+var _box_kinds: Dictionary = {}
+## 種類 → 見出し（「武器　1 / 3」のように枠の使い方を出す）
+var _kind_heads: Dictionary = {}
 ## 残り時間の導火線（ひとりで遊ぶときも、組み立てには制限時間がある）
 var fuse: FuseBar
 ## 新しく配られたパーツの uid → 「NEW」の札
@@ -29,10 +32,16 @@ var _prompt: TextEdit
 var _counter: Label
 var _timer: Label
 var _brain: Label
-var _slots: Label
-var _message: Label
-## 整備：スクラップの量の表示、パーツの uid → {"line", "box", "scrap", "reroll"}、再抽選の結果の板
+## 出撃ボタンの横：今の選び方の問題（なければ空）
+var _problem: Label
+## 出撃ボタンの下：送ったかどうか（通信対戦で、ほかの人を待っている間に出す）
+var _status: Label
+var _go: Button
+## 最後に送った機体とプロンプト（まだ送っていなければ空）。送ったあとに直したかを見分ける
+var _submitted: String = ""
+## 整備：スクラップの量の表示、整備の操作の問題、パーツの uid → {"line", "box", "scrap", "reroll"}、再抽選の結果の板
 var scrap_label: Label
+var maintenance_message: Label
 var rows: Dictionary = {}
 var reroll_overlay: Control = null
 var _reroll_stats_box: GridContainer
@@ -73,12 +82,15 @@ func build_ui() -> void:
 	scrap_label = add_label("", 16, COL_TEXT, head)
 	scrap_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	scrap_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	maintenance_message = add_label("", 15, COL_BAD, head)
+	maintenance_message.autowrap_mode = TextServer.AUTOWRAP_OFF
+	maintenance_message.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var frame_group := ButtonGroup.new()
 	var new_uids: Dictionary = {}
 	for np: Variant in p.new_parts:
 		new_uids[np.uid] = true
 	for kind: String in GameData.KINDS:
-		add_label(UiText.KIND_LABELS[kind], 22, COL_ACCENT, left)
+		_kind_heads[kind] = add_label(UiText.KIND_LABELS[kind], 22, COL_ACCENT, left)
 		for part: Variant in p.hand:
 			if part.kind != kind:
 				continue
@@ -91,6 +103,7 @@ func build_ui() -> void:
 			b.toggled.connect(_on_toggled.bind(kind, part.uid))
 			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			_boxes[part.uid] = b
+			_box_kinds[part.uid] = kind
 			# 1行：左にチェック、右に新しく配られたパーツの「NEW」の札
 			var line := HBoxContainer.new()
 			line.add_theme_constant_override("separation", 8)
@@ -106,9 +119,8 @@ func build_ui() -> void:
 			var sb: Button = _small_button(line, scrap.bind(part.uid))
 			var rb: Button = _small_button(line, reroll.bind(part.uid))
 			rows[part.uid] = {"line": line, "box": b, "scrap": sb, "reroll": rb}
-	_slots = add_label("", 17, COL_DIM, left)
 
-	# 右：残り時間、プロンプト、出撃、体力の一覧
+	# 右：残り時間の説明、操縦士、プロンプト、出撃、体力の一覧（残り時間そのものは上の導火線）
 	_timer = add_label("時間切れになると前の機体で出撃", 15, COL_DIM, right)
 	_brain = add_label("", 15, COL_DIM, right)
 	add_label("操縦士へのプロンプト", 22, COL_ACCENT, right)
@@ -124,17 +136,27 @@ func build_ui() -> void:
 		b.pressed.connect(set_prompt.bind(ex[1]))
 		examples.add_child(b)
 	_prompt = TextEdit.new()
-	_prompt.custom_minimum_size = Vector2(0, 110)
+	_prompt.custom_minimum_size = Vector2(0, 100)
 	_prompt.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_prompt.add_theme_font_size_override("font_size", 18)
+	_prompt.placeholder_text = "例：HPが30%以下なら修理に行け。それ以外は突撃しろ"
 	_prompt.text = p.prompt
 	_prompt.text_changed.connect(_update_info)
 	right.add_child(_prompt)
 	_counter = add_label("", 15, COL_DIM, right)
-	_message = add_label("", 17, COL_BAD, right)
-	add_button("出撃", confirm, right)
-	add_label(" ", 10, COL_DIM, right)
-	add_standings(right)
+	_counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var go_row := HBoxContainer.new()
+	go_row.add_theme_constant_override("separation", 12)
+	right.add_child(go_row)
+	_go = add_button("出撃", confirm, go_row)
+	_go.custom_minimum_size = Vector2(200, 48)
+	_go.add_theme_font_size_override("font_size", 22)
+	_problem = add_label("", 16, COL_BAD, go_row)
+	_problem.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_problem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status = add_label("", 15, COL_DIM, right)
+	add_label("みんなの体力", 17, COL_DIM, right)
+	add_standings(right, 15)
 	_add_reroll_overlay()
 	_sync_boxes()
 	_update_info()
@@ -155,7 +177,7 @@ func _process(delta: float) -> void:
 ## 付けていないパーツを解体する。問題があれば理由を返す
 func scrap(uid: int) -> String:
 	var err: String = session().scrap_part(main.human_id, uid)
-	_message.text = err
+	maintenance_message.text = err
 	_refresh_maintenance()
 	return err
 
@@ -163,7 +185,7 @@ func scrap(uid: int) -> String:
 ## 使っているパーツを再抽選する。結果は板で見せ、「元のまま／新しい性能」を選ぶ。問題があれば理由を返す
 func reroll(uid: int) -> String:
 	var err: String = session().reroll_part(main.human_id, uid)
-	_message.text = err
+	maintenance_message.text = err
 	_refresh_maintenance()
 	return err
 
@@ -202,6 +224,7 @@ func _refresh_maintenance() -> void:
 			(row["line"] as Control).queue_free()
 			rows.erase(uid)
 			_boxes.erase(uid)
+			_box_kinds.erase(uid)
 			new_tags.erase(uid)
 			continue
 		var box: CheckBox = row["box"]
@@ -288,7 +311,7 @@ func _show_reroll(p: Variant) -> void:
 		_reroll_stats_box.remove_child(c)
 		c.queue_free()
 	for h: String in ["", "今", "", "新しい性能"]:
-		_cell(h, 14, COL_DIM)
+		_reroll_cell(h, 14, COL_DIM)
 	var new_stats: Dictionary = p.pending_reroll["stats"]
 	for stat: String in def.stat_names():
 		var a: float = part.get_stat(stat)
@@ -298,16 +321,16 @@ func _show_reroll(p: Variant) -> void:
 		var mark: String = "＝" if same else ("▲" if better else "▼")
 		var col: Color = COL_DIM if same else (Color(0.55, 0.85, 0.45) if better else COL_BAD)
 		var label: String = UiText.STAT_LABELS.get(stat, stat)
-		_cell(label, 17, COL_TEXT)
-		_cell(UiText.stat_text(stat, a).trim_prefix(label).strip_edges(), 18, COL_TEXT)
-		_cell(mark, 18, col)
-		_cell(UiText.stat_text(stat, b).trim_prefix(label).strip_edges(), 18, col)
+		_reroll_cell(label, 17, COL_TEXT)
+		_reroll_cell(UiText.stat_text(stat, a).trim_prefix(label).strip_edges(), 18, COL_TEXT)
+		_reroll_cell(mark, 18, col)
+		_reroll_cell(UiText.stat_text(stat, b).trim_prefix(label).strip_edges(), 18, col)
 	reroll_overlay.position = Vector2.ZERO
 	reroll_overlay.size = get_viewport_rect().size
 	reroll_overlay.visible = true
 
 
-func _cell(text: String, size_px: int, col: Color) -> void:
+func _reroll_cell(text: String, size_px: int, col: Color) -> void:
 	add_label(text, size_px, col, _reroll_stats_box).autowrap_mode = TextServer.AUTOWRAP_OFF
 
 
@@ -362,11 +385,28 @@ func set_prompt(text: String) -> void:
 func confirm() -> String:
 	var err: String = session().submit_build(main.human_id, frame_uid, weapon_uids, skill_uids, _prompt.text)
 	if not err.is_empty():
-		_message.text = err
+		_problem.text = err
 		return err
-	show_waiting(_message, "出撃準備OK。ほかのプレイヤーを待っています（直して押し直してもよい）")
+	_submitted = _selection_key()
+	_update_status()
 	session().finish_build()
 	return ""
+
+
+## 今の選び方とプロンプトをまとめた文字列（送ったあとに直したかを見分けるため）
+func _selection_key() -> String:
+	return JSON.stringify([frame_uid, weapon_uids, skill_uids, _prompt.text])
+
+
+## 送ったかどうかを出す。通信対戦では送ったあともこの画面に残るので、直してまだ送っていないことも伝える
+func _update_status() -> void:
+	if _submitted.is_empty():
+		_status.text = ""
+	elif _submitted == _selection_key():
+		show_waiting(_status, "出撃準備OK。ほかのプレイヤーを待っています（直して押し直してもよい）")
+	elif session().is_online():
+		_status.text = "直した内容はまだ送っていない。もう一度「出撃」を押すと送り直す"
+		_status.add_theme_color_override("font_color", COL_ACCENT)
 
 
 func _sync_boxes() -> void:
@@ -375,6 +415,12 @@ func _sync_boxes() -> void:
 		(_boxes[uid] as CheckBox).set_pressed_no_signal(on)
 	if reroll_overlay != null:
 		_refresh_maintenance()
+
+
+## 今の選び方で出撃できるかを試合に尋ねる（状態は変えない）。問題がなければ空文字
+func current_problem() -> String:
+	var err: String = session().check_build(main.human_id, frame_uid, weapon_uids, skill_uids, _prompt.text)
+	return err + "。チェックを外してください" if err.contains("多すぎる") else err
 
 
 func _update_info() -> void:
@@ -387,10 +433,31 @@ func _update_info() -> void:
 		var fdef: GameData.PartDef = data.get_part(frame.def_id)
 		max_w += fdef.weapon_slots
 		max_s += fdef.skill_slots
-	_slots.text = "武器 %d / %d　スキル %d / %d" % [weapon_uids.size(), max_w, skill_uids.size(), max_s]
-	_slots.add_theme_color_override("font_color",
-		COL_BAD if weapon_uids.size() > max_w or skill_uids.size() > max_s else COL_DIM)
+	# 見出しに枠の使い方を出し、あふれていれば赤くする
+	var limits: Dictionary = {
+		GameData.KIND_WEAPON: [weapon_uids.size(), max_w],
+		GameData.KIND_SKILL: [skill_uids.size(), max_s],
+	}
+	for kind: String in limits:
+		var used: int = limits[kind][0]
+		var cap: int = limits[kind][1]
+		var head: Label = _kind_heads[kind]
+		head.text = "%s　%d / %d" % [UiText.KIND_LABELS[kind], used, cap]
+		if cap == 0:
+			head.text += "（このフレームには付けられない）"
+		head.add_theme_color_override("font_color", COL_BAD if used > cap else COL_ACCENT)
+	# 枠がいっぱいの種類は、まだ選んでいないものを押せなくする（外すことはいつでもできる）
+	for uid: int in _boxes:
+		var kind: String = _box_kinds[uid]
+		if not limits.has(kind):
+			continue
+		var cb: CheckBox = _boxes[uid]
+		cb.disabled = not cb.button_pressed and int(limits[kind][0]) >= int(limits[kind][1])
 	var limit: int = p.prompt_max_chars(data)
 	var n: int = _prompt.text.length()
 	_counter.text = "%d / %d 文字" % [n, limit]
 	_counter.add_theme_color_override("font_color", COL_BAD if n > limit else COL_DIM)
+	var problem: String = current_problem()
+	_go.disabled = not problem.is_empty()
+	_problem.text = problem
+	_update_status()

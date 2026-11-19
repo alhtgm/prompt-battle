@@ -11,6 +11,7 @@
     "battle.intent": "方針ごとの目標の距離など（実行役が使う）",
     "damage": "負けた人のダメージ = rank_coef × 順位 + margin_coef × 差（勝った側の残りHPの割合）。整数に丸める。順位は残り体力での順位で 1 が最上位",
     "damage.on_draw": "バトルが引き分けのとき。none は両者ダメージなし、rank_only は両者に順位の分だけ",
+    "round.battle_end_delay_sec": "3試合とも決着してから、ラウンド結果の画面に切り替えるまでの余韻（秒）。爆発や勝ち負けを見せるため。「最後まで飛ばす」ではすぐ切り替える",
     "match.max_rounds": "試合が終わらないときの安全装置。このラウンド数で打ち切り、残り体力の順で順位を決める",
     "match.pairing_attempts": "直前の相手と当たらない組み合わせを探す回数",
     "online": "通信対戦。port は待ち受ける番号。*_sec はサーバーが段階を締め切るまでの時間（全員が操作し終えたらすぐ進む）。state_send_hz は試合の状態、frame_send_hz はバトルの動きを送る回数（毎秒）。frame_log_entries は1回に送る実況の数",
@@ -108,6 +109,7 @@
   },
   "round": {
     "build_time_limit_sec": 45,
+    "battle_end_delay_sec": 3,
     "prompt_max_chars": 120
   },
   "damage": {

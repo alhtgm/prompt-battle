@@ -218,6 +218,12 @@ func test_human_player_flow() -> void:
 		"枠を超える武器は付けられない")
 	check(not s.submit_build(0, frame_uid, [weapon_uid], [], "あ".repeat(121)).is_empty(), "121文字のプロンプトは長すぎる")
 	var skills: Array = [skill_uid] if data.get_part(me.hand[0].def_id).skill_slots > 0 else []
+	# 出撃できるかの確かめ（組み立て画面が使う）：答えは submit_build と同じで、状態は変えない
+	check_eq(s.check_build(0, frame_uid, [weapon_uid, weapon_uid, weapon_uid, weapon_uid], [], ""),
+		s.submit_build(0, frame_uid, [weapon_uid, weapon_uid, weapon_uid, weapon_uid], [], ""), "確かめと出撃で同じ答え")
+	check(s.check_build(0, frame_uid, [999999], [], "").contains("手持ちにない"), "手持ちにないパーツは確かめでも見つかる")
+	check_eq(s.check_build(0, frame_uid, [weapon_uid], skills, "突撃しろ"), "", "正しい機体なら確かめも通る")
+	check(me.build == null and not me.done_this_phase, "確かめただけでは機体も決定も変わらない")
 	check_eq(s.submit_build(0, frame_uid, [weapon_uid], skills, "突撃しろ"), "", "正しい機体なら組める")
 
 	# 制限時間がたつと自動で締め切られる
@@ -225,11 +231,21 @@ func test_human_player_flow() -> void:
 	check_eq(s.phase, MatchSession.PHASE_BATTLE, "組み立ての制限時間がたつとバトルへ")
 	check(s.battle_of(0) != null, "自分のバトルがある")
 	check_eq(s.battles.size(), 3, "6人なら3試合")
-	for k: int in 60 * 80:  # 実時間で進めても決着する（80秒ぶん）
+	# 実時間で進めても決着する（制限時間＋余韻の秒数＋少しのゆとり）
+	var limit_sec: float = float(data.rule("battle.time_limit_sec")) + float(data.rule("round.battle_end_delay_sec")) + 5.0
+	var delay: float = float(data.rule("round.battle_end_delay_sec"))
+	var over_at: float = -1.0
+	var t: float = 0.0
+	for k: int in ceili(limit_sec * 60.0):
 		if s.phase != MatchSession.PHASE_BATTLE:
 			break
+		if over_at < 0.0 and s.battle_end_left >= 0.0:
+			over_at = t
 		s.update(1.0 / 60.0)
+		t += 1.0 / 60.0
 	check_eq(s.phase, MatchSession.PHASE_ROUND_RESULT, "3試合とも決着したらラウンド結果へ")
+	check(over_at >= 0.0, "3試合とも決着したことが分かる")
+	check(t - over_at >= delay - 0.05, "決着してから %.1f 秒の余韻を残して切り替わる（%.2f 秒）" % [delay, t - over_at])
 	s.finish_round_result()
 	check_eq(s.phase, MatchSession.PHASE_LOOT, "ラウンド結果の次は配布とパーク")
 	check_eq(me.new_parts.size(), 5, "パーツが5つ配られる")
