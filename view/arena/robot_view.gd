@@ -1,9 +1,12 @@
-# 3Dのアリーナに置く機体1体の見た目（骨組みでは箱）。バトルの機体の状態を読んで、位置・向き・転倒・落下・一言を映す。
+# 3Dのアリーナに置く機体1体の見た目。パーツの .glb があればそれを、なければ仮の箱で描き、バトルの状態を読んで位置・向き・転倒・落下を映す。
 # 計算上の (x, z) をそのまま3Dの (x, z) に置く。計算上の向き th（+x から +z へ回る）は rotation.y = -th になる。
 extends Node3D
 
 const GameData := preload("res://core/game_data.gd")
 const Grime := preload("res://view/grime.gd")
+const Look := preload("res://view/look.gd")
+const PartModels := preload("res://view/arena/part_models.gd")
+const ShieldView := preload("res://view/arena/shield_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
@@ -18,6 +21,10 @@ const FALL_SPEED: float = 6.0
 var body: Node3D
 var label: Label3D
 var aura: MeshInstance3D
+## バリア（シールドのスキル）の見た目
+var shield: Node3D
+## どのパーツをモデルで描いたか（テストと確認用）。false は仮の箱
+var used_models: Dictionary = {"frame": false, "weapons": [], "skills": []}
 var _fell_time: float = 0.0
 var _roll: float = 0.0
 
@@ -26,36 +33,68 @@ var _roll: float = 0.0
 ## label_lift は頭上の文字を上げる量（2機の文字が重ならないように）
 func setup(data: GameData, build: Variant, robot_radius: float, color: Color, glow: Color, label_lift: float = 0.0) -> void:
 	var fdef: GameData.PartDef = data.get_part(build.frame.def_id)
-	var mass: float = fdef.get_fixed("mass", 1.0)
-	var length: float = robot_radius * 1.7
-	var width: float = robot_radius * 1.4
-	var height: float = 0.5 + 0.35 * mass
 	body = Node3D.new()
 	add_child(body)
-	# 車体（くすんだ鉄板）と、下の黒いタイヤ
-	_box(Vector3(length, height, width), Vector3(0, height * 0.5 + 0.15, 0), Grime.material(color, 0.6, 0.7, 0.9))
-	var tire: StandardMaterial3D = Grime.material(Color(0.08, 0.08, 0.08), 0.0, 1.0, 1.5)
-	for sx: float in [-0.32, 0.32]:
-		for sz: float in [-0.5, 0.5]:
-			_box(Vector3(0.5, 0.3, 0.2), Vector3(length * sx, 0.15, width * sz + sign(sz) * 0.1), tire)
-	# 前の目印（陣営の色で光る帯）
-	_box(Vector3(0.08, 0.14, width * 0.8), Vector3(length * 0.5 + 0.02, height * 0.7 + 0.15, 0),
-		Grime.material(glow, 0.0, 0.5, 1.0, glow))
-	# 武器：前に並べる。撃つ武器は上に砲身
+	# 車体：モデルがあればそれを、なければ箱で作る。どちらでも、大きさと取り付け位置の目印が決まる
+	var dims: Dictionary = _add_frame_model(fdef, robot_radius, color)
+	if dims.is_empty():
+		dims = _add_frame_boxes(fdef, robot_radius, color)
+	var length: float = dims["length"]
+	var width: float = dims["width"]
+	var top: float = dims["top"]
+	used_models["frame"] = dims["model"]
+	# 陣営の目印：箱の車体は前の光る帯。モデルは形がいろいろで帯が浮くので、足もとの光る輪にする
+	if dims["model"]:
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = robot_radius * Look.MODEL_RING_RADIUS - 0.05
+		torus.outer_radius = robot_radius * Look.MODEL_RING_RADIUS + 0.05
+		torus.rings = 24
+		torus.ring_segments = 4
+		ring.mesh = torus
+		ring.material_override = Grime.material(glow, 0.0, 0.5, 1.0, glow)
+		ring.scale = Vector3(1.0, 0.2, 1.0)
+		ring.position.y = 0.03
+		body.add_child(ring)
+	else:
+		_box(Vector3(0.08, 0.14, width * 0.8), Vector3(length * 0.5 + 0.02, top * 0.6, 0),
+			Grime.material(glow, 0.0, 0.5, 1.0, glow))
+	# 武器：目印があればそこへ、なければ前に並べる（撃つ武器は上に砲身）
+	var weapon_mounts: Array = dims["weapon_mounts"]
 	var n: int = build.weapons.size()
 	for i: int in n:
 		var wdef: GameData.PartDef = data.get_part(build.weapons[i].def_id)
-		var mat: StandardMaterial3D = Grime.material(WEAPON_COLORS.get(wdef.behavior, Color.GRAY), 0.8, 0.55, 1.2)
+		var shoot: bool = wdef.behavior == "shoot"
 		var side: float = (float(i) - (n - 1) * 0.5) * (width / maxf(1.0, n)) * 0.9
-		if wdef.behavior == "shoot":
-			_box(Vector3(1.2, 0.18, 0.18), Vector3(length * 0.35, height + 0.35, side), mat)
+		var mount: Transform3D
+		if i < weapon_mounts.size():
+			mount = weapon_mounts[i]
+		elif shoot:
+			mount = Transform3D(Basis.IDENTITY, Vector3(length * 0.35 - 0.6, top + 0.2, side))
 		else:
-			_box(Vector3(0.6, 0.3, width / maxf(1.0, n) * 0.7), Vector3(length * 0.5 + 0.45, 0.4, side), mat)
-	# スキル：上にアンテナ（先が光る）
+			mount = Transform3D(Basis.IDENTITY, Vector3(length * 0.5 + 0.15, 0.4, side))
+		var size: float = Look.MODEL_SHOOT_SIZE if shoot else Look.MODEL_WEAPON_SIZE
+		if _attach_model(wdef.model, mount, size, false, color):
+			used_models["weapons"].append(true)
+			continue
+		used_models["weapons"].append(false)
+		var mat: StandardMaterial3D = Grime.material(WEAPON_COLORS.get(wdef.behavior, Color.GRAY), 0.8, 0.55, 1.2)
+		if shoot:
+			_box(Vector3(1.2, 0.18, 0.18), mount * Vector3(0.6, 0, 0), mat)
+		else:
+			_box(Vector3(0.6, 0.3, width / maxf(1.0, n) * 0.7), mount * Vector3(0.3, 0, 0), mat)
+	# スキル：目印があればそこへ、なければ後ろの上にアンテナ（先が光る）
+	var skill_mounts: Array = dims["skill_mounts"]
 	for i: int in build.skills.size():
-		_box(Vector3(0.1, 0.6, 0.1), Vector3(-length * 0.3, height + 0.45, (i - 0.5) * 0.5),
-			Grime.material(Color(0.2, 0.2, 0.2), 0.8, 0.6, 1.0))
-		_box(Vector3(0.16, 0.12, 0.16), Vector3(-length * 0.3, height + 0.8, (i - 0.5) * 0.5),
+		var sdef: GameData.PartDef = data.get_part(build.skills[i].def_id)
+		var mount: Transform3D = skill_mounts[i] if i < skill_mounts.size() \
+			else Transform3D(Basis.IDENTITY, Vector3(-length * 0.3, top, (i - 0.5) * 0.5))
+		if _attach_model(sdef.model, mount, Look.MODEL_SKILL_SIZE, true, color):
+			used_models["skills"].append(true)
+			continue
+		used_models["skills"].append(false)
+		_box(Vector3(0.1, 0.6, 0.1), mount * Vector3(0, 0.3, 0), Grime.material(Color(0.2, 0.2, 0.2), 0.8, 0.6, 1.0))
+		_box(Vector3(0.16, 0.12, 0.16), mount * Vector3(0, 0.65, 0),
 			Grime.material(SKILL_COLOR, 0.0, 0.5, 1.0, SKILL_COLOR))
 	# スキルが効いている間の光
 	aura = MeshInstance3D.new()
@@ -68,13 +107,17 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	aura.material_override = mat
-	aura.position.y = height * 0.5
+	aura.position.y = top * 0.5
 	aura.visible = false
 	add_child(aura)
+	# バリア（シールドのスキル）。機体が裏返っても膜は立ったままにするため、body ではなくここに置く
+	shield = ShieldView.new()
+	add_child(shield)
+	shield.setup(robot_radius * Look.SHIELD_RADIUS, top + Look.SHIELD_HEIGHT_PAD)
 	# 頭上の名前と一言（いつもカメラを向く）
 	label = Label3D.new()
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.position = Vector3(0, height + 1.4 + label_lift, 0)
+	label.position = Vector3(0, top + 1.25 + label_lift, 0)
 	label.font_size = 56
 	label.modulate = glow.lightened(0.3)
 	label.pixel_size = 0.01
@@ -97,16 +140,90 @@ func sync(r: Variant, delta: float) -> void:
 		_fell_time += delta
 		position.y = -FALL_SPEED * _fell_time * _fell_time
 		scale = Vector3.ONE * maxf(0.05, 1.0 - _fell_time * 0.8)
+	# シールドはバリアで、ほかのスキルは薄い光で見せる
 	var active: bool = false
+	var shield_left: float = 0.0
 	for s: Variant in r.skills:
-		active = active or s.active_t > 0.0
+		if s.active_t <= 0.0:
+			continue
+		if s.def.behavior == "shield":
+			shield_left = maxf(shield_left, s.active_t / maxf(0.001, s.def.get_fixed("duration_sec", 1.0)))
+		else:
+			active = true
 	aura.visible = active and not r.fell
+	shield.update(shield_left > 0.0 and not r.fell, shield_left, delta)
 	label.text = r.name if r.say.is_empty() else "%s「%s」" % [r.name, r.say]
+
+
+## 被弾した（arena_view が出来事から呼ぶ）。バリアを張っていれば、攻撃が来た向きに波紋を出す
+func on_hit(from_world: Vector3) -> void:
+	shield.hit(from_world)
 
 
 ## 頭上の文字を出す位置（3D）
 func label_position() -> Vector3:
 	return label.global_position
+
+
+## フレームのモデルを置く。大きさをそろえ、前後左右の真ん中を機体の中心に、底を床に合わせる。
+## モデルがなければ空の辞書。あれば大きさと、モデルの中の取り付け位置の目印（機体から見た位置）を返す
+func _add_frame_model(fdef: GameData.PartDef, robot_radius: float, color: Color) -> Dictionary:
+	var model: Node3D = PartModels.instantiate(fdef.model)
+	if model == null:
+		return {}
+	var box: AABB = PartModels.bounds(model)
+	var s: float = PartModels.fit_scale(box, robot_radius * 2.0 * Look.MODEL_FRAME_FOOTPRINT, Vector3(1, 0, 1))
+	var c: Vector3 = box.get_center()
+	var holder := Node3D.new()
+	holder.scale = Vector3.ONE * s
+	holder.position = Vector3(-c.x, -box.position.y, -c.z) * s
+	holder.add_child(model)
+	body.add_child(holder)
+	PartModels.roughen(model, color)
+	var mounts: Dictionary = {PartModels.MOUNT_WEAPON: [], PartModels.MOUNT_SKILL: []}
+	for prefix: String in mounts:
+		for t: Transform3D in PartModels.mounts(model, prefix):
+			var m: Transform3D = holder.transform * t
+			m.basis = m.basis.orthonormalized()  # 付けるパーツはフレームの倍率で伸ばさない
+			mounts[prefix].append(m)
+	return {"model": true, "length": box.size.x * s, "width": box.size.z * s, "top": box.size.y * s,
+		"weapon_mounts": mounts[PartModels.MOUNT_WEAPON], "skill_mounts": mounts[PartModels.MOUNT_SKILL]}
+
+
+## 仮の車体（くすんだ鉄板の箱と、下の黒いタイヤ）。重いフレームほど背が高い
+func _add_frame_boxes(fdef: GameData.PartDef, robot_radius: float, color: Color) -> Dictionary:
+	var mass: float = fdef.get_fixed("mass", 1.0)
+	var length: float = robot_radius * 1.7
+	var width: float = robot_radius * 1.4
+	var height: float = 0.5 + 0.35 * mass
+	_box(Vector3(length, height, width), Vector3(0, height * 0.5 + 0.15, 0), Grime.material(color, 0.6, 0.7, 0.9))
+	var tire: StandardMaterial3D = Grime.material(Color(0.08, 0.08, 0.08), 0.0, 1.0, 1.5)
+	for sx: float in [-0.32, 0.32]:
+		for sz: float in [-0.5, 0.5]:
+			_box(Vector3(0.5, 0.3, 0.2), Vector3(length * sx, 0.15, width * sz + sign(sz) * 0.1), tire)
+	return {"model": false, "length": length, "width": width, "top": height + 0.15, "weapon_mounts": [], "skill_mounts": []}
+
+
+## 武器やスキルのモデルを取り付け位置に付ける。モデルがなければ false。
+## 武器はモデルの後ろの面を取り付け位置に当てて前（+X）へ伸ばし、スキル（on_top）は底を取り付け位置に乗せる
+func _attach_model(path: String, mount: Transform3D, size: float, on_top: bool, color: Color) -> bool:
+	var model: Node3D = PartModels.instantiate(path)
+	if model == null:
+		return false
+	var box: AABB = PartModels.bounds(model)
+	var s: float = PartModels.fit_scale(box, size)
+	var c: Vector3 = box.get_center()
+	var offset: Vector3 = Vector3(-c.x, -box.position.y, -c.z) if on_top else Vector3(-box.position.x, -c.y, -c.z)
+	var holder := Node3D.new()
+	holder.transform = mount
+	var inner := Node3D.new()
+	inner.scale = Vector3.ONE * s
+	inner.position = offset * s
+	inner.add_child(model)
+	holder.add_child(inner)
+	body.add_child(holder)
+	PartModels.roughen(model, color)
+	return true
 
 
 func _box(size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:

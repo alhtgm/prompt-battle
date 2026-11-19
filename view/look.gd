@@ -47,6 +47,39 @@ const PAD_COLOR := Color(0.15, 0.55, 0.25)
 const SIDE_BODY: Array[Color] = [Color(0.38, 0.52, 0.66), Color(0.72, 0.45, 0.26)]
 const SIDE_GLOW: Array[Color] = [Color(0.35, 0.75, 1.0), Color(1.0, 0.55, 0.15)]
 
+# ---- パーツの3Dモデル（view/arena/part_models.gd） ----
+## 読み込んだモデルの大きさを機体に合わせて自動でそろえるか（false ならモデルの 1 = 1m のまま）
+const MODEL_AUTO_FIT: bool = true
+## フレームの一番長い辺（横から見た前後・左右）を、機体の当たり判定の直径の何倍にするか
+const MODEL_FRAME_FOOTPRINT: float = 1.0
+## 武器・撃つ武器・スキルのモデルの一番長い辺（m）
+const MODEL_WEAPON_SIZE: float = 0.9
+const MODEL_SHOOT_SIZE: float = 1.2
+const MODEL_SKILL_SIZE: float = 0.6
+## 荒い見た目になじませる：つやの最低値、金属らしさの最大値、陣営の色を混ぜる割合
+const MODEL_ROUGHNESS_MIN: float = 0.75
+const MODEL_METALLIC_MAX: float = 0.6
+const MODEL_SIDE_TINT: float = 0.2
+## モデルの機体の足もとに出す、陣営の色で光る輪の半径（当たり判定の半径の何倍か）
+const MODEL_RING_RADIUS: float = 1.1
+
+# ---- バリア（シールドのスキル。view/arena/shield_view.gd と view/shaders/shield.gdshader） ----
+const SHIELD_COLOR := Color(0.35, 0.8, 1.0)
+## 膜の横の半径（当たり判定の半径の何倍か）と、機体の高さに足す余り（m）
+const SHIELD_RADIUS: float = 1.9
+const SHIELD_HEIGHT_PAD: float = 0.7
+## 横と縦に並べる六角形の数（低い解像度で潰れないよう粗め）
+const SHIELD_CELLS := Vector2(10, 5)
+## 展開と消滅にかける秒数、床の光の輪が広がりきる秒数
+const SHIELD_OPEN_SEC: float = 0.35
+const SHIELD_CLOSE_SEC: float = 0.45
+const SHIELD_RING_SEC: float = 0.5
+## 残り時間がこの割合を切ると、ちらついて不安定になる
+const SHIELD_LOW_FRAC: float = 0.3
+## 膜の明るさと、機体や床を照らす光の強さ
+const SHIELD_INTENSITY: float = 1.0
+const SHIELD_LIGHT_ENERGY: float = 1.2
+
 # ---- 演出 ----
 const SPARK_COLOR := Color(1.0, 0.75, 0.3)
 ## この量以上のダメージで画面を揺らす

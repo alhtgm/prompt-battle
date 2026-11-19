@@ -177,6 +177,10 @@ func _spawn_sparks() -> void:
 		if t != "hit" and t != "flip" and t != "fall":
 			continue
 		var r: Variant = sim.robots[int(e["robot"])]
+		if t == "hit" and e.has("by") and int(e["by"]) >= 0:
+			# バリアを張っていれば、攻撃が来た向きに波紋を出す
+			var by: Variant = sim.robots[int(e["by"])]
+			robot_views[int(e["robot"])].on_hit(Vector3(by.x, 0.0, by.z))
 		var big: bool = t != "hit" or float(e.get("damage", 0.0)) >= Look.SHAKE_DAMAGE
 		if big:
 			_shake = maxf(_shake, Look.SHAKE_AMOUNT * (1.6 if t == "fall" else 1.0))

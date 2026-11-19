@@ -7,7 +7,7 @@
     "weapon.behavior": "grind=触れている間削る / strike=叩く / lift=ひっくり返す / ram=体当たり / shoot=弾を撃つ",
     "skill.behavior": "booster=一定時間速くなる / shield=一定時間被ダメージ減 / repair=HP回復 / shockwave=近くの相手を吹き飛ばす / emp=近くの相手を動けなくする / overclock=一定時間与ダメージ増",
     "skill.fixed": "cooldown_sec（再使用まで）, duration_sec（効果時間）, range（届く距離）, charges（使える回数。0は無制限）",
-    "model": "見た目のモデルの場所。骨組みでは仮（ファイルはまだない）"
+    "model": "見た目のモデル（.glb）の場所。ファイルがなければ仮の箱で描く。作り方と置き方は docs/models.md"
   },
   "parts": [
     { "id": "frame_light",    "name": "軽量フレーム",     "kind": "frame", "weapon_slots": 1, "skill_slots": 2,
