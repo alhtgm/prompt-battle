@@ -311,12 +311,14 @@ func _start_round() -> void:
 	round_no += 1
 	for p: Player in players:
 		p.done_this_phase = false
-		p.new_parts = []
 	phase_time_left = float(data.rule("round.build_time_limit_sec"))
 	phase = PHASE_BUILD
 
 
 func _start_battles() -> void:
+	# 配られたパーツの記録は、組み立ての画面で NEW を出し終えたら消す（画面用の記録で、計算には使わない）
+	for p: Player in players:
+		p.new_parts = []
 	var ids: Array[int] = []
 	for p: Player in alive_players():
 		ids.append(p.id)

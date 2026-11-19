@@ -3,6 +3,7 @@
 extends "res://view/screen_base.gd"
 
 const GameData := preload("res://core/game_data.gd")
+const FuseBar := preload("res://view/fuse_bar.gd")
 
 ## 押すとプロンプト欄に入る例（[ボタンの名前, プロンプト]）
 const PROMPT_EXAMPLES: Array = [
@@ -17,6 +18,10 @@ var frame_uid: int = -1
 var weapon_uids: Array[int] = []
 var skill_uids: Array[int] = []
 var _boxes: Dictionary = {}
+## 残り時間の導火線（ひとりで遊ぶときも、組み立てには制限時間がある）
+var fuse: FuseBar
+## 新しく配られたパーツの uid → 「NEW」の札
+var new_tags: Dictionary = {}
 var _prompt: TextEdit
 var _counter: Label
 var _timer: Label
@@ -27,6 +32,9 @@ var _message: Label
 
 func build_ui() -> void:
 	add_title("ラウンド %d：組み立てとプロンプト" % session().round_no)
+	fuse = FuseBar.new()
+	box.add_child(fuse)
+	fuse.update(session().phase_time_left, 0.0)  # 最初のコマから満タンで出す
 	var cols: Array[VBoxContainer] = add_columns()
 	var left: VBoxContainer = cols[0]
 	var right: VBoxContainer = cols[1]
@@ -49,6 +57,9 @@ func build_ui() -> void:
 	# 左：手持ちパーツ
 	add_label("チェックを入れて機体を組む。フレームは1つ、武器とスキルはフレームの枠の数まで。", 15, COL_DIM, left)
 	var frame_group := ButtonGroup.new()
+	var new_uids: Dictionary = {}
+	for np: Variant in p.new_parts:
+		new_uids[np.uid] = true
 	for kind: String in GameData.KINDS:
 		add_label(UiText.KIND_LABELS[kind], 22, COL_ACCENT, left)
 		for part: Variant in p.hand:
@@ -61,12 +72,23 @@ func build_ui() -> void:
 			if kind == GameData.KIND_FRAME:
 				b.button_group = frame_group
 			b.toggled.connect(_on_toggled.bind(kind, part.uid))
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			_boxes[part.uid] = b
-			left.add_child(b)
+			# 1行：左にチェック、右に新しく配られたパーツの「NEW」の札
+			var line := HBoxContainer.new()
+			line.add_theme_constant_override("separation", 8)
+			left.add_child(line)
+			line.add_child(b)
+			# 札のない行にも同じ幅の場所を取っておき、行の右端をそろえる
+			var tag: Label = _new_tag(line)
+			if new_uids.has(part.uid):
+				new_tags[part.uid] = tag
+			else:
+				tag.modulate.a = 0.0
 	_slots = add_label("", 17, COL_DIM, left)
 
 	# 右：残り時間、プロンプト、出撃、体力の一覧
-	_timer = add_label("", 20, COL_ACCENT, right)
+	_timer = add_label("時間切れになると前の機体で出撃", 15, COL_DIM, right)
 	_brain = add_label("", 15, COL_DIM, right)
 	add_label("操縦士へのプロンプト", 22, COL_ACCENT, right)
 	add_label("操縦士はこれを読んで、試合中に自分で動き方を決める。押すと例が入る：", 15, COL_DIM, right)
@@ -96,10 +118,23 @@ func build_ui() -> void:
 	_update_info()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _timer != null and main.session != null:
-		_timer.text = "残り %d 秒（時間切れになると前の機体で出撃）" % ceili(maxf(0.0, session().phase_time_left))
+		fuse.update(session().phase_time_left, delta)
 		_brain.text = main.agents.brain_status_text()
+
+
+## 「NEW」の札（パーツの行の右側）
+func _new_tag(parent: Control) -> Label:
+	var l: Label = add_label("NEW", 13, Color.BLACK, parent)
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var st := StyleBoxFlat.new()
+	st.bg_color = Look.UI_ACCENT
+	st.content_margin_left = 8
+	st.content_margin_right = 8
+	l.add_theme_stylebox_override("normal", st)
+	return l
 
 
 func _on_toggled(on: bool, kind: String, uid: int) -> void:
