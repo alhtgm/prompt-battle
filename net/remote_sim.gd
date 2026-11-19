@@ -13,6 +13,10 @@ const FOLLOW: float = 14.0
 class ShotView:
 	var x: float = 0.0
 	var z: float = 0.0
+	var vx: float = 0.0
+	var vz: float = 0.0
+	var id: int = 0
+	var def_id: String = ""
 
 
 var robots: Array[Robot] = []
@@ -62,6 +66,7 @@ func apply_frame(f: Dictionary) -> void:
 		var r: Robot = robots[i]
 		r.hp = float(d["hp"])
 		r.stun = float(d["stun"])
+		r.flipped = bool(d.get("flipped", false))
 		r.fell = bool(d["fell"])
 		r.intent = str(d["intent"])
 		r.say = str(d["say"])
@@ -70,6 +75,12 @@ func apply_frame(f: Dictionary) -> void:
 		r.fuse = float(d.get("fuse", -1.0))
 		r.fuse_total = float(d.get("fuse_total", 0.0))
 		r.self_destructed = bool(d.get("self_destructed", false))
+		var hk: Array = d.get("hook", ["", 0.0, 0.0, -1])
+		if hk.size() >= 4:
+			r.hook_state = str(hk[0])
+			r.hook_x = float(hk[1])
+			r.hook_z = float(hk[2])
+			r.hook_slot = int(hk[3])
 		var sk: Array = d.get("skills", [])
 		for k: int in mini(sk.size(), r.skills.size()):
 			r.skills[k].active_t = float(sk[k][0])
@@ -91,6 +102,11 @@ func apply_frame(f: Dictionary) -> void:
 	for k: int in sh.size():
 		shots[k].x = float(sh[k][0])
 		shots[k].z = float(sh[k][1])
+		if sh[k].size() >= 6:
+			shots[k].vx = float(sh[k][2])
+			shots[k].vz = float(sh[k][3])
+			shots[k].id = int(sh[k][4])
+			shots[k].def_id = str(sh[k][5])
 	# 実況：まだ持っていない番号のものだけ足す
 	var first: int = int(f.get("log_from", 0))
 	var entries: Array = f.get("log", [])

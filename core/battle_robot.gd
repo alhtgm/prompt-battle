@@ -6,6 +6,12 @@ const GameData := preload("res://core/game_data.gd")
 const PartInstance := preload("res://core/part_instance.gd")
 const Build := preload("res://core/build.gd")
 
+## ハープーンガンの釣り針の状態：撃っていない／飛んでいる／当たった相手を引き寄せている／外れて戻っている
+const HOOK_NONE: String = ""
+const HOOK_FLY: String = "fly"
+const HOOK_PULL: String = "pull"
+const HOOK_BACK: String = "back"
+
 
 ## 武器1つの状態
 class WeaponSlot:
@@ -50,6 +56,8 @@ var weapons: Array[WeaponSlot] = []
 var skills: Array[SkillSlot] = []
 ## 動けない残り時間（ひっくり返された、EMP）
 var stun: float = 0.0
+## ひっくり返されているか（リフターで。EMP やハープーンガンで止められているだけなら false）
+var flipped: bool = false
 var ram_cd: float = 0.0
 var repair_left: float = 0.0
 var repairing: bool = false
@@ -67,6 +75,14 @@ var dealt: float = 0.0
 var fuse: float = -1.0
 var fuse_total: float = 0.0
 var self_destructed: bool = false
+## ハープーンガンの釣り針。状態は HOOK_* のどれか。位置と速さ、飛べる残りの距離、撃った武器の番号
+var hook_state: String = ""
+var hook_x: float = 0.0
+var hook_z: float = 0.0
+var hook_vx: float = 0.0
+var hook_vz: float = 0.0
+var hook_left: float = 0.0
+var hook_slot: int = -1
 
 # ---- 考えるための記録 ----
 var last_request_t: float = -INF
@@ -166,7 +182,8 @@ func to_dict() -> Dictionary:
 		ss.append({"id": s.def.id, "cd": s.cd, "active": s.active_t, "charges": s.charges_left})
 	return {
 		"x": x, "z": z, "th": th, "vx": vx, "vz": vz, "hp": hp, "max_hp": max_hp,
-		"stun": stun, "fell": fell, "intent": intent, "say": say, "dealt": dealt,
+		"stun": stun, "flipped": flipped, "fell": fell, "intent": intent, "say": say, "dealt": dealt,
 		"repair_left": repair_left, "weapons": ws, "skills": ss,
 		"fuse": fuse, "self_destructed": self_destructed,
+		"hook": [hook_state, hook_x, hook_z, hook_slot],
 	}

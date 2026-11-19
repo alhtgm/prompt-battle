@@ -29,6 +29,8 @@ const BEHAVIORS: Dictionary = {
 		"lift": {"stats": [], "fixed": ["reach", "stun_sec"]},
 		"ram": {"stats": [], "fixed": ["reach", "min_speed"]},
 		"shoot": {"stats": [], "fixed": ["range", "ammo", "projectile_speed", "spread_deg"]},
+		# 釣り針を撃って、当たった相手を自分の前まで引き寄せる
+		"hook": {"stats": [], "fixed": ["range", "projectile_speed", "pull_speed", "hold_sec"]},
 	},
 	KIND_SKILL: {
 		"booster": {"stats": ["speed_mult"], "fixed": ["duration_sec"]},

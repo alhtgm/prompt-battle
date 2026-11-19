@@ -100,6 +100,40 @@ const FALL_BURST_STREAK_LEN: float = 6.0
 const FALL_BURST_FLASH: float = 12.0
 const FALL_BURST_SHAKE: float = 1.1
 
+# ---- 撃つ武器の弾（view/arena/projectile_fx.gd） ----
+## 武器の型ごとの弾の見た目。書いていない武器は曳光弾（光の筋）
+const SHOT_STYLES: Dictionary = {"weapon_rocket": "rocket"}
+const ROCKET_BODY := Color(0.36, 0.38, 0.3)
+const ROCKET_NOSE := Color(0.55, 0.16, 0.1)
+## 後ろの炎（外側と芯）と、炎が照らす光の強さ
+const ROCKET_FLAME := Color(1.0, 0.5, 0.15)
+const ROCKET_FLAME_CORE := Color(1.0, 0.9, 0.55)
+const ROCKET_LIGHT: float = 2.5
+## ロケットの爆発：秒数、火の玉の大きさ（m）、閃光の強さ
+const ROCKET_BOOM_SEC: float = 0.5
+const ROCKET_BOOM_SIZE: float = 1.4
+const ROCKET_BOOM_FLASH: float = 8.0
+## 曳光弾の色と長さ（m）、銃口の閃光の色、煙の色
+const TRACER_COLOR := Color(1.0, 0.75, 0.3)
+const TRACER_LENGTH: float = 0.9
+const MUZZLE_FLASH := Color(1.0, 0.8, 0.4)
+const SMOKE_COLOR := Color(0.5, 0.49, 0.47)
+
+# ---- ハープーンガン（view/arena/hook_view.gd）と効果音（view/sfx.gd） ----
+const HOOK_CHAIN_COLOR := Color(0.42, 0.41, 0.4)
+const HOOK_HEAD_COLOR := Color(0.5, 0.48, 0.45)
+## 釣り針の先（熱で赤く光る）
+const HOOK_HOT_COLOR := Color(1.0, 0.35, 0.1)
+## 鎖の輪の大きさ（m）と、並べる輪の数の上限、飛んでいる間のたわみ（m）、巻き取り機の太鼓の半径（m）
+const HOOK_LINK_SIZE: float = 0.16
+const HOOK_MAX_LINKS: int = 110
+const HOOK_SAG: float = 0.35
+const HOOK_REEL_RADIUS: float = 0.14
+## 引き寄せている相手の、釣り針が刺さる高さ（m）
+const HOOK_TARGET_HEIGHT: float = 0.7
+## 効果音の大きさ（0〜1）
+const SFX_VOLUME: float = 0.8
+
 # ---- 自爆装置（view/arena/robot_view.gd の点滅と、explosion_view.gd の大きな爆発） ----
 const SELF_DESTRUCT_COLOR := Color(1.0, 0.12, 0.08)
 ## 点滅の速さ（1秒に何回）：導火線に火がついた直後と、自爆の直前

@@ -21,7 +21,7 @@ const BEHAVIOR_LABELS: Dictionary = {
 	"grind": "触れている間削る", "strike": "叩く", "lift": "ひっくり返す", "ram": "体当たり",
 	"shoot": "撃つ", "booster": "一時的に速くなる", "shield": "一時的に被ダメ軽減",
 	"repair": "HP回復", "shockwave": "近くの相手を吹き飛ばす", "emp": "近くの相手を止める",
-	"overclock": "一時的に与ダメ増", "self_destruct": "HP0で突撃して自爆",
+	"overclock": "一時的に与ダメ増", "self_destruct": "HP0で突撃して自爆", "hook": "釣り針で引き寄せる",
 }
 
 
@@ -33,6 +33,7 @@ const BEHAVIOR_DESCRIPTIONS: Dictionary = {
 	"lift": "相手をすくい上げてひっくり返し、しばらく動けなくする。穴の近くで使うと強い。",
 	"ram": "勢いをつけてぶつかったときだけ効く。速く当たるほど相手を大きく吹き飛ばす。",
 	"shoot": "離れた相手に弾を撃つ。弾数に限りがあり、撃ち尽くすと使えない。",
+	"hook": "前の相手に釣り針を撃ち込み、鎖を巻き上げて目の前まで引き寄せる。引き寄せた相手は少しのあいだ動けない。ダメージは小さいが、近接武器や穴と組み合わせると強い。",
 	"booster": "一定時間、移動が速くなる。追いかけるのにも逃げるのにも使える。",
 	"shield": "一定時間、受けるダメージを減らす。",
 	"repair": "その場でHPを回復する。使える回数に限りがある。",
@@ -46,12 +47,13 @@ const FIXED_LABELS: Dictionary = {
 	"mass": "重さ", "turn_rate_deg": "曲がる速さ", "cooldown_sec": "使える間隔", "arc_deg": "当たる角度",
 	"reach": "届く距離", "range": "射程", "ammo": "弾数", "stun_sec": "止める時間", "min_speed": "必要な速さ",
 	"duration_sec": "効果時間", "charges": "使える回数", "fuse_sec": "自爆まで", "speed_mult": "突撃の速さ",
+	"pull_speed": "引き寄せる速さ", "hold_sec": "動けなくする時間",
 	"knockback": "吹き飛ばし",
 }
 ## 吹き出しに出す固定値（種類ごと、この順で）。値が 0 のものは出さない（charges の 0 は「無制限」として出す）
 const FIXED_SHOWN: Dictionary = {
 	"frame": ["mass", "turn_rate_deg"],
-	"weapon": ["cooldown_sec", "range", "ammo", "stun_sec", "min_speed"],
+	"weapon": ["cooldown_sec", "range", "ammo", "stun_sec", "min_speed", "hold_sec"],
 	"skill": ["fuse_sec", "speed_mult", "duration_sec", "cooldown_sec", "range", "charges"],
 }
 ## 小さいほど良いステータス（吹き出しで、抽選の当たり外れの色を逆にする）
@@ -62,7 +64,7 @@ const LOWER_IS_BETTER: Array[String] = ["speed_penalty"]
 static func fixed_text(key: String, v: float) -> String:
 	var label: String = FIXED_LABELS.get(key, key)
 	match key:
-		"cooldown_sec", "duration_sec", "stun_sec", "fuse_sec":
+		"cooldown_sec", "duration_sec", "stun_sec", "fuse_sec", "hold_sec":
 			return "%s %.1f秒" % [label, v]
 		"turn_rate_deg", "arc_deg":
 			return "%s %d°" % [label, roundi(v)]
@@ -155,6 +157,10 @@ static func event_line(e: Dictionary, names: Array) -> String:
 			return t + "%s がひっくり返された！" % who
 		"skill":
 			return t + "%s が %s を使った" % [who, e["skill"]]
+		"hook_hit":
+			return t + "%s が %s に釣り上げられた！ 引き寄せられる" % [who, e["weapon"]]
+		"hook_end":
+			return t + "%s が目の前まで引き寄せられた" % who
 		"fuse":
 			return t + "%s の %s が作動！ 相手に突っ込む" % [who, e["skill"]]
 		"self_destruct":

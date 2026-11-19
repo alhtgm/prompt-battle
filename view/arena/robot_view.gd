@@ -10,11 +10,12 @@ const ShieldView := preload("res://view/arena/shield_view.gd")
 const ExplosionView := preload("res://view/arena/explosion_view.gd")
 const SkillFxView := preload("res://view/arena/skill_fx_view.gd")
 const FallBurstView := preload("res://view/arena/fall_burst_view.gd")
+const HookView := preload("res://view/arena/hook_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
 	"grind": Color(0.62, 0.62, 0.6), "strike": Color(0.4, 0.4, 0.42), "lift": Color(0.7, 0.55, 0.12),
-	"ram": Color(0.35, 0.34, 0.33), "shoot": Color(0.18, 0.18, 0.2),
+	"ram": Color(0.35, 0.34, 0.33), "shoot": Color(0.18, 0.18, 0.2), "hook": Color(0.3, 0.32, 0.3),
 }
 const SKILL_COLOR := Color(0.4, 0.95, 1.0)
 ## ひっくり返る・戻る・落ちる速さ（見た目だけの値）
@@ -30,6 +31,10 @@ var shield: Node3D
 ## 穴に落ちたときの光の柱（落ちる前は null）
 var fall_burst: Node3D = null
 var _glow: Color = Color.WHITE
+## ハープーンガンの鎖と釣り針（持っていなければ null）と、武器の先の位置（機体の中の座標。武器の番号順）
+var hook_view: Node3D = null
+var weapon_tips: Array[Vector3] = []
+var _radius: float = 0.9
 ## 自爆装置の赤い点滅の重ね塗り（点滅していなければ null）と、今点いているか
 var blink_mat: StandardMaterial3D = null
 var blink_on: bool = false
@@ -83,7 +88,8 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 	var n: int = build.weapons.size()
 	for i: int in n:
 		var wdef: GameData.PartDef = data.get_part(build.weapons[i].def_id)
-		var shoot: bool = wdef.behavior == "shoot"
+		# ハープーンガンも、撃つ武器と同じく長い銃身として上に載せる
+		var shoot: bool = wdef.behavior == "shoot" or wdef.behavior == "hook"
 		var side: float = (float(i) - (n - 1) * 0.5) * (width / maxf(1.0, n)) * 0.9
 		var mount: Transform3D
 		if i < weapon_mounts.size():
@@ -93,6 +99,8 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 		else:
 			mount = Transform3D(Basis.IDENTITY, Vector3(length * 0.5 + 0.15, 0.4, side))
 		var size: float = Look.MODEL_SHOOT_SIZE if shoot else Look.MODEL_WEAPON_SIZE
+		# 武器の先（銃口）の位置。ハープーンガンの鎖はここから出る
+		weapon_tips.append(mount * Vector3(size if shoot else 0.6, 0, 0))
 		if _attach_model(wdef.model, mount, size, false, color):
 			used_models["weapons"].append(true)
 			continue
@@ -115,6 +123,14 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 		_box(Vector3(0.1, 0.6, 0.1), mount * Vector3(0, 0.3, 0), Grime.material(Color(0.2, 0.2, 0.2), 0.8, 0.6, 1.0))
 		_box(Vector3(0.16, 0.12, 0.16), mount * Vector3(0, 0.65, 0),
 			Grime.material(SKILL_COLOR, 0.0, 0.5, 1.0, SKILL_COLOR))
+	# ハープーンガンを持っていれば、鎖と釣り針の見た目を用意する（鎖は世界の中に張るので、機体の向きに引きずられない）
+	for w: Variant in build.weapons:
+		if data.get_part(w.def_id).behavior == "hook" and hook_view == null:
+			hook_view = HookView.new()
+			add_child(hook_view)
+			hook_view.top_level = true
+			hook_view.setup()
+	_radius = robot_radius
 	# シールド以外の効果が続くスキル（ブースターの噴射炎、オーバークロックの赤い火花）
 	skill_fx = SkillFxView.new()
 	add_child(skill_fx)
@@ -142,7 +158,9 @@ func sync(r: Variant, delta: float) -> void:
 	position = Vector3(r.x, 0.0, r.z)
 	rotation.y = -r.th
 	# ひっくり返されている間は前後の軸で回して裏返す
-	var target_roll: float = PI if r.stun > 0.0 else 0.0
+	# ひっくり返されたとき（リフター）だけ裏返す。EMP やハープーンガンで止められているだけなら裏返さない
+	var flipped: bool = bool(r.get("flipped")) if "flipped" in r else r.stun > 0.0
+	var target_roll: float = PI if flipped and r.stun > 0.0 else 0.0
 	_roll = move_toward(_roll, target_roll, FLIP_SPEED * delta)
 	body.rotation.x = _roll
 	# 穴に落ちたら沈んで小さくなる
@@ -194,6 +212,20 @@ func sync(r: Variant, delta: float) -> void:
 	var alive: bool = not r.fell and not destroyed
 	skill_fx.update(booster and alive, overclock and alive, delta)
 	shield.update(shield_left > 0.0 and not r.fell and not destroyed, shield_left, delta)
+	# ハープーンガンの鎖と釣り針：銃口から、釣り針（引き寄せている間は相手）まで
+	if hook_view != null:
+		var hs: String = str(r.get("hook_state")) if "hook_state" in r else ""
+		if hs != "" and is_inside_tree():
+			var slot: int = int(r.get("hook_slot"))
+			var tip: Vector3 = weapon_tips[slot] if slot >= 0 and slot < weapon_tips.size() \
+				else Vector3(_size * 0.5, _top * 0.6, 0)
+			var muzzle: Vector3 = body.to_global(tip)
+			var y: float = Look.HOOK_TARGET_HEIGHT if hs == "pull" else muzzle.y
+			var parent: Node3D = get_parent_node_3d()
+			var at := Vector3(float(r.get("hook_x")), y, float(r.get("hook_z")))
+			hook_view.update(hs, muzzle, parent.to_global(at) if parent != null else at, _radius, delta)
+		else:
+			hook_view.update("", Vector3.ZERO, Vector3.ZERO, _radius, delta)
 	label.text = r.name if r.say.is_empty() else "%s「%s」" % [r.name, r.say]
 
 

@@ -34,6 +34,9 @@ class Shot:
 	var knockback: float = 0.0
 	var life: float = 0.0
 	var label: String = ""
+	## 弾の通し番号（画面が、どの弾がどこで消えたかを見分けるため）と、撃った武器の型
+	var id: int = 0
+	var def_id: String = ""
 
 
 var data: GameData
@@ -59,6 +62,8 @@ var _think_min_gap: float = 0.5
 var _say_max: int = 40
 ## 自爆のダメージを与えている最中（壊された相手の自爆装置には火をつけない）
 var _blasting: bool = false
+## 次に撃つ弾の通し番号
+var _next_shot_id: int = 1
 ## 自爆が相手を壊したか（決着のつき方を「自爆で相打ち」にする）
 var _blast_kill: bool = false
 
@@ -147,6 +152,9 @@ func step() -> void:
 	for i: int in 2:
 		_weapons(i)  # 5. 武器の当たり判定とダメージ
 	_update_shots()
+	for i: int in 2:
+		_hook(i)  # 5.5 ハープーンガンの釣り針（飛ぶ・引き寄せる・戻る）
+	_clamp_walls()
 	for i: int in 2:
 		_hazards(i)  # 6. 修理ステーションと穴
 	for i: int in 2:
@@ -263,6 +271,8 @@ func _apply_control(r: Robot, c: Dictionary) -> void:
 	var cfg: Dictionary = _b["robot"]
 	if r.stun > 0.0:
 		r.stun = maxf(0.0, r.stun - dt)
+		if r.stun <= 0.0:
+			r.flipped = false  # 起き上がった
 		var f: float = minf(1.0, float(cfg["stun_friction"]) * dt)
 		r.vx -= r.vx * f
 		r.vz -= r.vz * f
@@ -389,6 +399,7 @@ func _weapons(i: int) -> void:
 					_damage(en.index, dmg, me.x, me.z, def.name, i, true)
 					_knock(en, nx, nz, kb)
 					en.stun = def.get_fixed("stun_sec")
+					en.flipped = true
 					en.trigger = "ひっくり返された"
 					en.add_note("ひっくり返された")
 					events.append({"type": "flip", "robot": en.index, "by": i})
@@ -399,6 +410,20 @@ func _weapons(i: int) -> void:
 					w.cd = def.get_fixed("cooldown_sec")
 					_damage(en.index, dmg * clampf(closing / need, 1.0, 2.0), me.x, me.z, def.name, i, true)
 					_knock(en, nx, nz, kb)
+			"hook":
+				# 釣り針は1本ずつ。前の相手が届く距離にいれば撃つ
+				if me.hook_state == Robot.HOOK_NONE and w.cd <= 0.0 and in_arc and not en.is_down() \
+						and d <= def.get_fixed("range") + en.radius:
+					w.cd = def.get_fixed("cooldown_sec")
+					me.hook_state = Robot.HOOK_FLY
+					me.hook_slot = me.weapons.find(w)
+					me.hook_x = me.x + cos(me.th) * (me.radius + 0.1)
+					me.hook_z = me.z + sin(me.th) * (me.radius + 0.1)
+					var hs: float = def.get_fixed("projectile_speed")
+					me.hook_vx = cos(me.th) * hs
+					me.hook_vz = sin(me.th) * hs
+					me.hook_left = def.get_fixed("range") + en.radius
+					events.append({"type": "hook_fire", "robot": i, "weapon": def.name})
 			"shoot":
 				if w.ammo > 0 and w.cd <= 0.0 and in_arc and d <= def.get_fixed("range"):
 					w.cd = def.get_fixed("cooldown_sec")
@@ -416,6 +441,9 @@ func _weapons(i: int) -> void:
 					s.knockback = kb
 					s.life = def.get_fixed("range") / maxf(0.01, spd)
 					s.label = def.name
+					s.def_id = def.id
+					s.id = _next_shot_id
+					_next_shot_id += 1
 					shots.append(s)
 					events.append({"type": "shot", "robot": i, "weapon": def.name})
 					if w.ammo == 0:
@@ -472,6 +500,78 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 		events.append({"type": "hit", "robot": victim_i, "by": attacker_i, "weapon": label,
 			"damage": dmg, "back": back})
 	return dmg
+
+
+# ---- 5.5 ハープーンガン ----
+
+## 釣り針を進める。飛んでいれば相手に当たったかを見る。当たれば相手を自分のところまで引き寄せ、
+## 着いたら自分にぴったり付けて少しのあいだ動けなくする。外れたら巻き戻す
+func _hook(i: int) -> void:
+	var me: Robot = robots[i]
+	if me.hook_state == Robot.HOOK_NONE:
+		return
+	var en: Robot = robots[1 - i]
+	var w: Robot.WeaponSlot = me.weapons[me.hook_slot] if me.hook_slot >= 0 and me.hook_slot < me.weapons.size() else null
+	if w == null or me.fell or me.is_down() or me.self_destructed:
+		_drop_hook(me)
+		return
+	var def: GameData.PartDef = w.def
+	match me.hook_state:
+		Robot.HOOK_FLY:
+			var mv := Vector2(me.hook_vx, me.hook_vz) * dt
+			me.hook_x += mv.x
+			me.hook_z += mv.y
+			me.hook_left -= mv.length()
+			if not en.fell and not en.is_down() \
+					and Vector2(en.x - me.hook_x, en.z - me.hook_z).length() <= en.radius + 0.25:
+				_damage(en.index, w.inst.get_stat("damage"), me.x, me.z, def.name, i, true)
+				me.hook_state = Robot.HOOK_PULL
+				me.hook_x = en.x
+				me.hook_z = en.z
+				en.trigger = "引き寄せられた"
+				en.add_note("釣り針で引き寄せられた")
+				events.append({"type": "hook_hit", "robot": en.index, "by": i, "weapon": def.name})
+			elif me.hook_left <= 0.0:
+				me.hook_state = Robot.HOOK_BACK
+		Robot.HOOK_PULL:
+			if en.fell or en.is_down():
+				_drop_hook(me)
+				return
+			var to_me := Vector2(me.x - en.x, me.z - en.z)
+			var dist: float = to_me.length()
+			var contact: float = me.radius + en.radius + 0.05
+			var pull: float = def.get_fixed("pull_speed") * dt
+			en.vx = 0.0
+			en.vz = 0.0
+			if dist - pull <= contact:
+				# 着いた：引き寄せた向きのまま自分にぴったり付け、少しのあいだ動けなくする
+				var n: Vector2 = -to_me / dist if dist > 1e-6 else Vector2(cos(me.th), sin(me.th))
+				en.x = me.x + n.x * contact
+				en.z = me.z + n.y * contact
+				en.stun = maxf(en.stun, def.get_fixed("hold_sec"))
+				_drop_hook(me)
+				events.append({"type": "hook_end", "robot": en.index, "by": i})
+			else:
+				en.x += to_me.x / dist * pull
+				en.z += to_me.y / dist * pull
+				en.stun = maxf(en.stun, dt * 2.0)  # 引かれている間は自分では動けない
+				me.hook_x = en.x
+				me.hook_z = en.z
+		Robot.HOOK_BACK:
+			var mx: float = me.x + cos(me.th) * (me.radius + 0.1)
+			var mz: float = me.z + sin(me.th) * (me.radius + 0.1)
+			var back := Vector2(mx - me.hook_x, mz - me.hook_z)
+			var spd: float = def.get_fixed("projectile_speed") * dt
+			if back.length() <= spd:
+				_drop_hook(me)
+			else:
+				me.hook_x += back.x / back.length() * spd
+				me.hook_z += back.y / back.length() * spd
+
+
+func _drop_hook(me: Robot) -> void:
+	me.hook_state = Robot.HOOK_NONE
+	me.hook_slot = -1
 
 
 # ---- 6. 修理ステーションと穴 ----
@@ -531,6 +631,7 @@ func _arm_fuse(i: int) -> void:
 	r.fuse_total = r.fuse
 	s.active_t = r.fuse
 	r.stun = 0.0
+	r.flipped = false
 	r.intent = "charge"
 	r.say = SELF_DESTRUCT_SAY
 	events.append({"type": "fuse", "robot": i, "skill": s.def.name})
