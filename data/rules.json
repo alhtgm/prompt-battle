@@ -16,7 +16,8 @@
     "match.pairing_attempts": "直前の相手と当たらない組み合わせを探す回数",
     "online": "通信対戦。port は待ち受ける番号。*_sec はサーバーが段階を締め切るまでの時間（全員が操作し終えたらすぐ進む）。state_send_hz は試合の状態、frame_send_hz はバトルの動きを送る回数（毎秒）。frame_log_entries は1回に送る実況の数",
     "agent.cpu":"CPUの組み立て。フレームは HP×速さ×(1+frame_slot_weight×枠の数) に ±frame_whim の気まぐれ。パーツは抽選の良さに 0〜part_whim の気まぐれ",
-    "agent.mock": "仮の頭脳が方針とスキルを選ぶときのしきい値。hp は % 、dist は距離"
+    "agent.mock": "仮の頭脳が方針とスキルを選ぶときのしきい値。hp は % 、dist は距離",
+    "scrap": "スクラップ（ポイント）。unlock_round ラウンド目から、付けていないパーツを解体して value（種類ごと。抽選の良さが上半分なら +high_roll_bonus）をもらい、付けているパーツの再抽選（reroll_part_cost）とパーク候補の引き直し（reroll_perks_cost、1ラウンド reroll_perks_per_round 回まで）に使う。負けたラウンドは loss_bonus もらえる（最初から貯まる）"
   },
   "players": 6,
   "initial_health": 100,
@@ -133,6 +134,15 @@
   "draft": {
     "choices_per_kind": 5,
     "allow_duplicate_picks": true
+  },
+  "scrap": {
+    "unlock_round": 4,
+    "value": { "frame": 3, "weapon": 2, "skill": 2 },
+    "high_roll_bonus": 1,
+    "reroll_part_cost": 2,
+    "reroll_perks_cost": 1,
+    "reroll_perks_per_round": 2,
+    "loss_bonus": 1
   },
   "loot": {
     "parts_per_round": 5,
