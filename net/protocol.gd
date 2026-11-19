@@ -2,8 +2,8 @@
 # 状態の組み立ては「見る人」ごとに行い、見せてはいけないもの（生き残っている間の相手のプロンプト、ほかの人の手持ち）は入れない。
 extends RefCounted
 
-## スクラップの操作を足したので 2（違う版どうしはつながらない）
-const VERSION: int = 2
+## 弾の番号・速度・武器の種類を送るようにしたので 3（違う版どうしはつながらない）
+const VERSION: int = 3
 
 # クライアント → サーバー
 const HELLO: String = "hello"
@@ -119,7 +119,7 @@ static func battle_frame(s: RefCounted, max_log: int) -> Dictionary:
 			})
 		var shots: Array = []
 		for sh: Variant in sim.shots:
-			shots.append([sh.x, sh.z])
+			shots.append([sh.x, sh.z, sh.vx, sh.vz, sh.id, sh.weapon, sh.owner])
 		var first: int = maxi(0, sim.log.size() - max_log)
 		battles.append({
 			"tick": sim.tick, "over": sim.over, "result": sim.result, "robots": robots, "shots": shots,

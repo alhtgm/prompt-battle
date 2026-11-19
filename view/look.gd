@@ -111,6 +111,56 @@ const SHAKE_DAMAGE: float = 8.0
 const SHAKE_AMOUNT: float = 0.35
 const SHAKE_DECAY: float = 6.0
 
+# ---- 撃つ武器の弾（view/arena/shot_fx.gd） ----
+## 弾の高さ（床から）
+const SHOT_HEIGHT: float = 0.9
+## ロケットの見た目にする武器（パーツID）。ほかの撃つ武器は曳光弾
+const ROCKET_WEAPONS: Array[String] = ["weapon_rocket"]
+## 曳光弾：太さ、明るい芯の長さ、後ろへ伸びる薄い尾の長さと濃さ、色（低い解像度でも1画素以上に見える太さ）
+const TRACER_WIDTH: float = 0.09
+const TRACER_LENGTH: float = 0.8
+const TRACER_TAIL_LENGTH: float = 1.4
+const TRACER_TAIL_ALPHA: float = 0.35
+const TRACER_COLOR := Color(1.0, 0.85, 0.45)
+## 銃口の光：色、大きさ（半径）、消えるまでの秒数
+const MUZZLE_COLOR := Color(1.0, 0.92, 0.7)
+const MUZZLE_SIZE: float = 0.22
+const MUZZLE_LIFE: float = 0.07
+## 機関銃の弾が当たった所：火花の数・消えるまでの秒数・速さ・散らばる角度、光の大きさ
+const BULLET_SPARK_AMOUNT: int = 14
+const BULLET_SPARK_LIFE: float = 0.4
+const BULLET_SPARK_SPEED: float = 7.0
+const BULLET_SPARK_SPREAD_DEG: float = 40.0
+const BULLET_HIT_FLASH_SIZE: float = 0.28
+## 当たったかの見分け：最後に見た位置から何秒前までの道のりを見るか、機体の半径に足すゆとり、壁までの距離のゆとり
+const SHOT_HIT_LOOKBACK_SEC: float = 0.08
+const SHOT_HIT_MARGIN: float = 0.35
+const SHOT_WALL_MARGIN: float = 0.8
+## ロケット：太さ（半径）・長さ、筒と先の色、噴射炎の長さ・色・伸び縮み（±の割合）
+const ROCKET_RADIUS: float = 0.14
+const ROCKET_LENGTH: float = 0.85
+const ROCKET_BODY_COLOR := Color(0.42, 0.43, 0.4)
+const ROCKET_NOSE_COLOR := Color(0.7, 0.16, 0.1)
+const ROCKET_FLAME_LENGTH: float = 0.75
+const ROCKET_FLAME_COLOR := Color(1.0, 0.6, 0.2)
+const ROCKET_FLAME_FLICKER: float = 0.25
+## ロケットの煙の尾：出し続ける煙の数・消えるまでの秒数。煙の色
+const ROCKET_TRAIL_AMOUNT: int = 50
+const ROCKET_TRAIL_LIFE: float = 1.0
+const SHOT_SMOKE_COLOR := Color(0.2, 0.19, 0.18)
+## ロケットを撃った瞬間：光の大きさ・秒数、煙のひと吹きの数
+const ROCKET_MUZZLE_SIZE: float = 0.45
+const ROCKET_MUZZLE_LIFE: float = 0.14
+const ROCKET_MUZZLE_SMOKE: int = 8
+## ロケットの爆発：火の玉の大きさ（半径）・秒数・色、火花の数、煙の数（火の玉と光は機体に隠れないよう手前に重ねて描く）
+const ROCKET_BLAST_SIZE: float = 1.3
+const ROCKET_BLAST_LIFE: float = 0.5
+const ROCKET_FIRE_COLOR := Color(1.0, 0.5, 0.15)
+## 爆発の芯の色（火の玉の内側に重ねる明るい黄色）
+const ROCKET_CORE_COLOR := Color(1.0, 0.85, 0.45)
+const ROCKET_BLAST_SPARKS: int = 36
+const ROCKET_BLAST_SMOKE: int = 16
+
 # ---- 文字と板（画面の作り） ----
 const UI_BG := Color(0.06, 0.06, 0.065)
 const UI_PANEL := Color(0.09, 0.085, 0.08, 0.88)

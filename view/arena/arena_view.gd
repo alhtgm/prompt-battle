@@ -4,6 +4,8 @@
 extends Node3D
 
 const GameData := preload("res://core/game_data.gd")
+## 撃つ武器の弾の見た目と、撃つ・当たるときの演出
+const ShotFx := preload("res://view/arena/shot_fx.gd")
 const RobotView := preload("res://view/arena/robot_view.gd")
 const Look := preload("res://view/look.gd")
 const Grime := preload("res://view/grime.gd")
@@ -22,14 +24,15 @@ var data: GameData
 var sim: Variant = null
 var robot_views: Array[Node3D] = []
 var camera: Camera3D
-var _shots: Array[MeshInstance3D] = []
+var shot_fx: Node3D
 var _sparks: Array = []  # [ノード, 残り時間]
 var _log_seen: int = 0
 var _look_at := Vector3.ZERO
 var _shake: float = 0.0
 var _time: float = 0.0
-var _shot_mat: StandardMaterial3D
 var _spark_mat: StandardMaterial3D
+## 撃つ武器の名前（被弾の記録の武器名）→ パーツID。撃つ武器の被弾の火花は shot_fx が当たった所に出すので、ここでは出さない
+var _shoot_names: Dictionary = {}
 
 
 func setup(game_data: GameData) -> void:
@@ -65,7 +68,12 @@ func setup(game_data: GameData) -> void:
 	camera.position = CAMERA_OFFSET
 	camera.look_at(Vector3.ZERO)
 
-	_shot_mat = _glow_mat(Color(1.0, 0.9, 0.55))
+	shot_fx = ShotFx.new()
+	add_child(shot_fx)
+	shot_fx.setup(half, float(data.rule("battle.robot.radius")))
+	for def: Variant in data.parts:
+		if str(def.behavior) == "shoot":
+			_shoot_names[str(def.name)] = str(def.id)
 	_spark_mat = _glow_mat(Look.SPARK_COLOR)
 
 
@@ -134,7 +142,7 @@ func sync(delta: float) -> void:
 	_time += delta
 	for i: int in 2:
 		robot_views[i].sync(sim.robots[i], delta)
-	_sync_shots()
+	shot_fx.sync(sim, delta)
 	_spawn_sparks()
 	_update_sparks(delta)
 	_look_at = _look_at.lerp(_midpoint(), minf(1.0, CAMERA_FOLLOW * delta))
@@ -150,22 +158,6 @@ func _midpoint() -> Vector3:
 	var b: Variant = sim.robots[1]
 	return Vector3(clampf((a.x + b.x) * 0.5, -CAMERA_LIMIT, CAMERA_LIMIT), 0.0,
 		clampf((a.z + b.z) * 0.5, -CAMERA_LIMIT, CAMERA_LIMIT))
-
-
-func _sync_shots() -> void:
-	while _shots.size() < sim.shots.size():
-		var m := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.18, 0.18, 0.18)
-		m.mesh = mesh
-		m.material_override = _shot_mat
-		add_child(m)
-		_shots.append(m)
-	for k: int in _shots.size():
-		var on: bool = k < sim.shots.size()
-		_shots[k].visible = on
-		if on:
-			_shots[k].position = Vector3(sim.shots[k].x, 0.9, sim.shots[k].z)
 
 
 ## 新しく起きた出来事から、火花・画面の揺れを出す
@@ -187,6 +179,9 @@ func _spawn_sparks() -> void:
 		var big: bool = t != "hit" or float(e.get("damage", 0.0)) >= Look.SHAKE_DAMAGE
 		if big:
 			_shake = maxf(_shake, Look.SHAKE_AMOUNT * (1.6 if t == "fall" else 1.0))
+		if t == "hit" and _shoot_names.has(str(e.get("weapon", ""))):
+			shot_fx.on_shot_hit(sim, int(e["robot"]), int(e.get("by", -1)), _shoot_names[str(e["weapon"])])
+			continue
 		if t == "fall":
 			continue
 		_burst(Vector3(r.x, 0.9, r.z), 24 if big else 8)
