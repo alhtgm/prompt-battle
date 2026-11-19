@@ -34,3 +34,11 @@ func plan_build(data: GameData, player: Player, rng: Rng) -> Dictionary:
 
 func pick_perk(choices: Array[String], rng: Rng) -> String:
 	return base.pick_perk(choices, rng)
+
+
+func plan_upkeep(data: GameData, player: Player, rng: Rng) -> Dictionary:
+	return base.plan_upkeep(data, player, rng)
+
+
+func accept_reroll(data: GameData, part: Variant, new_stats: Dictionary) -> bool:
+	return base.accept_reroll(data, part, new_stats)

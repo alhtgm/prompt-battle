@@ -1,10 +1,11 @@
-# CPUプレイヤーの判断：開始時のパーツ選び、組み立てとプロンプト、パーク選び。
+# CPUプレイヤーの判断：開始時のパーツ選び、組み立てとプロンプト、パーク選び、スクラップの使い方。
 # 人間が時間内に決めなかったときの代わりにも使う。乱数は渡された Rng だけを使う。
 extends RefCounted
 
 const GameData := preload("res://core/game_data.gd")
 const Rng := preload("res://core/rng.gd")
 const PartInstance := preload("res://core/part_instance.gd")
+const Loot := preload("res://core/loot.gd")
 
 ## 機体に合わせて選ぶプロンプト
 const PROMPT_SHOOTER: String = "距離をとって撃ちまくれ。弾が切れたら突っ込め。HPが減ったら修理に行け"
@@ -110,3 +111,26 @@ static func _best_parts(data: GameData, parts: Array[PartInstance], count: int, 
 ## パークを1つ選ぶ
 static func pick_perk(choices: Array[String], rng: Rng) -> String:
 	return rng.pick(choices) if not choices.is_empty() else ""
+
+
+## スクラップの使い方。付けていないパーツは全部解体し、付けているパーツを抽選の悪い順に再抽選する
+## 返す辞書：{"scrap": 解体する uid の配列, "reroll": 再抽選する uid の配列（スクラップが足りなくなったら試合側で止める）}
+static func plan_upkeep(data: GameData, hand: Array[PartInstance], equipped_uids: Array, _rng: Rng) -> Dictionary:
+	var scrap: Array = []
+	var equipped: Array = []
+	for p: PartInstance in hand:
+		if equipped_uids.has(p.uid):
+			equipped.append([Loot.roll_quality(data.get_part(p.def_id), p.stats), p.uid])
+		else:
+			scrap.append(p.uid)
+	equipped.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0] if a[0] != b[0] else a[1] < b[1])
+	var reroll: Array = []
+	for row: Array in equipped:
+		reroll.append(row[1])
+	return {"scrap": scrap, "reroll": reroll}
+
+
+## 再抽選の結果を取るか。抽選の良さが上がったときだけ新しい性能にする
+static func accept_reroll(data: GameData, part: PartInstance, new_stats: Dictionary) -> bool:
+	var def: GameData.PartDef = data.get_part(part.def_id)
+	return Loot.roll_quality(def, new_stats) > Loot.roll_quality(def, part.stats)

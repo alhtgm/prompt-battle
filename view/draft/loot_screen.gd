@@ -1,6 +1,8 @@
 # ラウンド後の配布とパーク選び。配られた5つのパーツをカードで1枚ずつめくって見せ（合わせると吹き出し）、
 # パークを3枚のカードから1つ選び（1・2・3 キーでも選べる）、決定ボタンで確定する。パークのカードには、今の機体にどう効くかを出す。
 # 通信対戦で制限時間があるときは、残り時間を導火線のバーで見せる。操作は MatchSession のメソッドだけを通す。
+# 後半のラウンドでは、配られたパーツをその場で解体してスクラップにでき、スクラップでパークの候補を引き直せる
+# （通信対戦では結果が遅れて届くので、自分の状態を見張って表示を直す）。
 extends "res://view/screen_base.gd"
 
 const GameData := preload("res://core/game_data.gd")
@@ -20,24 +22,43 @@ var confirm_button: Button
 ## 残り時間の導火線（制限時間がないときは隠す）
 var fuse: FuseBar
 var _message: Label
+## スクラップ：量の表示、配られたパーツの uid → 解体ボタン、パーク候補の引き直しボタン
+var scrap_label: Label
+var scrap_buttons: Dictionary = {}
+var reroll_perks_button: Button
+var _perk_row: HBoxContainer
+var _shown_choices: Array = []
+var _sig: String = ""
 
 
 func build_ui() -> void:
 	add_title("ラウンド %d：パーツ配布とパーク" % session().round_no)
 	_add_fuse()
+	scrap_label = add_label("", 17, COL_TEXT)
 	add_label("配られたパーツ（手持ちに加わった。▲▼ は今付けているパーツとの比べ）", 20, COL_ACCENT)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	box.add_child(row)
 	var i: int = 0
 	for p: Variant in me().new_parts:
+		# カードの下に解体のボタン（使えるときだけ出す）
+		var cell := VBoxContainer.new()
+		cell.add_theme_constant_override("separation", 4)
+		row.add_child(cell)
 		var card: PartCard = PartCard.new()
-		row.add_child(card)
+		cell.add_child(card)
 		card.setup(main.data, p, null, "NEW", _equipped_like(p))
 		card.hovered.connect(_on_card_hovered)
 		card.unhovered.connect(_on_card_unhovered)
 		_deal(card, i)
 		part_cards.append(card)
+		var uid: int = p.uid
+		var sb := Button.new()
+		sb.add_theme_font_size_override("font_size", 14)
+		sb.focus_mode = Control.FOCUS_NONE
+		sb.pressed.connect(func() -> void: scrap(uid))
+		cell.add_child(sb)
+		scrap_buttons[uid] = sb
 		i += 1
 	add_label(" ", 4)
 	var head := add_row()
@@ -45,20 +66,16 @@ func build_ui() -> void:
 	var hint: Label = add_label("試合の間ずっと効き、同じものは重なる。押して選び（1・2・3 キーでも）、決定で確定", 15, COL_DIM, head)
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_OFF  # 横並びの中で折り返すと幅が0になり、縦書きのように伸びる
-	var perk_row := HBoxContainer.new()
-	perk_row.add_theme_constant_override("separation", 16)
-	box.add_child(perk_row)
-	var n: int = 1
-	var group := ButtonGroup.new()
-	for perk_id: String in me().perk_choices:
-		var pc: PerkCard = PerkCard.new()
-		perk_row.add_child(pc)
-		pc.setup(main.data, me(), perk_id, n, group)
-		pc.toggled.connect(func(on: bool) -> void:
-			if on:
-				select_perk(perk_id))
-		perk_cards.append(pc)
-		n += 1
+	reroll_perks_button = Button.new()
+	reroll_perks_button.add_theme_font_size_override("font_size", 14)
+	reroll_perks_button.focus_mode = Control.FOCUS_NONE
+	reroll_perks_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	reroll_perks_button.pressed.connect(func() -> void: reroll_perks())
+	head.add_child(reroll_perks_button)
+	_perk_row = HBoxContainer.new()
+	_perk_row.add_theme_constant_override("separation", 16)
+	box.add_child(_perk_row)
+	_build_perk_cards()
 	var row2 := add_row()
 	confirm_button = add_button("決定", confirm, row2)
 	confirm_button.custom_minimum_size = Vector2(200, 50)
@@ -75,6 +92,84 @@ func build_ui() -> void:
 	tooltip = PartTooltip.new()
 	add_child(tooltip)
 	tooltip.setup(main.data)
+	_refresh_scrap()
+
+
+## パークのカードを今の候補で作り直す（引き直したときも使う。選んでいたものは外れる）
+func _build_perk_cards() -> void:
+	for c: Node in _perk_row.get_children():
+		_perk_row.remove_child(c)
+		c.queue_free()
+	perk_cards.clear()
+	selected_perk = ""
+	if confirm_button != null:
+		confirm_button.disabled = true
+	var n: int = 1
+	var group := ButtonGroup.new()
+	for perk_id: String in me().perk_choices:
+		var pc: PerkCard = PerkCard.new()
+		_perk_row.add_child(pc)
+		pc.setup(main.data, me(), perk_id, n, group)
+		pc.toggled.connect(func(on: bool) -> void:
+			if on:
+				select_perk(perk_id))
+		perk_cards.append(pc)
+		n += 1
+	_shown_choices = Array(me().perk_choices).duplicate()
+
+
+## 配られたパーツを解体してスクラップにする。問題があれば理由を返す
+func scrap(uid: int) -> String:
+	var err: String = session().scrap_part(main.human_id, uid)
+	_message.text = err
+	_refresh_scrap()
+	return err
+
+
+## パークの候補を引き直す。問題があれば理由を返す
+func reroll_perks() -> String:
+	var err: String = session().reroll_perk_choices(main.human_id)
+	_message.text = err
+	_refresh_scrap()
+	return err
+
+
+func _state_sig() -> String:
+	var p: Variant = me()
+	var uids := PackedStringArray()
+	for part: Variant in p.hand:
+		uids.append(str(part.uid))
+	return "%d|%d|%s|%s|%s" % [p.scrap, p.perk_rerolls_used, str(p.perk_choices), ",".join(uids), str(p.done_this_phase)]
+
+
+## スクラップの表示を今の状態に合わせる（量、解体して消えたカード、引き直したパークの候補、ボタンの出し方）
+func _refresh_scrap() -> void:
+	var p: Variant = me()
+	var unlocked: bool = session().scrap_unlocked()
+	var cost: int = int(main.data.rule("scrap.reroll_perks_cost"))
+	var left: int = int(main.data.rule("scrap.reroll_perks_per_round")) - p.perk_rerolls_used
+	scrap_label.text = "スクラップ %d" % p.scrap
+	if not unlocked:
+		scrap_label.text += "（解体と引き直しは %d ラウンド目から）" % int(main.data.rule("scrap.unlock_round"))
+	for card: Button in part_cards.duplicate():
+		var uid: int = card.part.uid
+		var part: Variant = p.find_part(uid)
+		if part == null:  # 解体した
+			if tooltip.part == card.part:
+				tooltip.hide_tip()
+			card.get_parent().queue_free()
+			part_cards.erase(card)
+			scrap_buttons.erase(uid)
+			continue
+		var sb: Button = scrap_buttons[uid]
+		sb.visible = unlocked and not p.done_this_phase
+		sb.text = "解体 +%d" % session().scrap_value(part)
+	reroll_perks_button.visible = unlocked
+	reroll_perks_button.text = "候補を引き直す（スクラップ %d）残り %d 回" % [cost, maxi(0, left)]
+	reroll_perks_button.disabled = p.done_this_phase or left <= 0 or p.scrap < cost
+	if Array(p.perk_choices) != _shown_choices and not p.done_this_phase:
+		_build_perk_cards()
+	_sig = _state_sig()
 
 
 ## パークを選ぶ（まだ確定しない）。選んだカードだけが金枠になる
@@ -155,6 +250,8 @@ func _add_fuse() -> void:
 func _process(delta: float) -> void:
 	if fuse != null and fuse.visible and main.session != null:
 		fuse.update(session().phase_time_left, delta)
+	if scrap_label != null and main.session != null and _state_sig() != _sig:
+		_refresh_scrap()
 
 
 func _on_card_hovered(card: Button) -> void:
