@@ -49,6 +49,8 @@ var battles: Array[Battle] = []
 var history: Array[Dictionary] = []
 ## 今の段階の残り時間（組み立ての段階だけ使う）
 var phase_time_left: float = 0.0
+## 3試合とも決着してから、ラウンド結果へ切り替えるまでの残り秒数（決着前は -1）
+var battle_end_left: float = -1.0
 
 var _rng: Rng
 var _agents: RefCounted
@@ -162,27 +164,21 @@ func submit_build(player_id: int, frame_uid: int, weapon_uids: Array, skill_uids
 	var p: Player = get_player(player_id)
 	if p == null or not p.alive:
 		return "そのプレイヤーは参加していない"
-	var b := Build.new()
-	b.frame = p.find_part(frame_uid)
-	for uid: Variant in weapon_uids:
-		var w: PartInstance = p.find_part(int(uid))
-		if w == null:
-			return "手持ちにない武器（uid %d）" % int(uid)
-		b.weapons.append(w)
-	for uid: Variant in skill_uids:
-		var s: PartInstance = p.find_part(int(uid))
-		if s == null:
-			return "手持ちにないスキル（uid %d）" % int(uid)
-		b.skills.append(s)
-	var err: String = b.validate(data, p.extra_weapon_slots(data), p.extra_skill_slots(data))
-	if not err.is_empty():
-		return err
-	if prompt.length() > p.prompt_max_chars(data):
-		return "プロンプトが長すぎる（%d / %d 文字）" % [prompt.length(), p.prompt_max_chars(data)]
-	p.build = b
+	var r: Dictionary = p.assemble_build(data, frame_uid, weapon_uids, skill_uids, prompt)
+	if not str(r["error"]).is_empty():
+		return r["error"]
+	p.build = r["build"]
 	p.prompt = prompt
 	p.done_this_phase = true
 	return ""
+
+
+## 出撃できるかだけを調べる（状態は変えない）。組み立て画面が、押す前に問題を見せるのに使う
+func check_build(player_id: int, frame_uid: int, weapon_uids: Array, skill_uids: Array, prompt: String) -> String:
+	var p: Player = get_player(player_id)
+	if p == null or not p.alive:
+		return "そのプレイヤーは参加していない"
+	return p.assemble_build(data, frame_uid, weapon_uids, skill_uids, prompt)["error"]
 
 
 ## 組み立てを締め切ってバトルを始める。決めていない人は、前の機体があればそのまま、なければ CPU の判断で組む
@@ -190,7 +186,11 @@ func finish_build() -> void:
 	if phase != PHASE_BUILD:
 		return
 	for p: Player in alive_players():
+		if not p.pending_reroll.is_empty():
+			resolve_reroll(p.id, false)  # 選ばないまま締め切ったら元のまま
+	for p: Player in alive_players():
 		if p.done_this_phase:
+			_cpu_upkeep(p)
 			continue
 		var keep: bool = p.is_human and p.build != null \
 			and p.build.validate(data, p.extra_weapon_slots(data), p.extra_skill_slots(data)).is_empty()
@@ -200,6 +200,7 @@ func finish_build() -> void:
 		var err: String = submit_build(p.id, plan["frame"], plan["weapons"], plan["skills"], plan["prompt"])
 		if not err.is_empty():
 			push_error("CPU の組み立てが不正：%s" % err)
+		_cpu_upkeep(p)
 	_start_battles()
 
 
@@ -222,16 +223,146 @@ func update(delta: float) -> void:
 				_accum -= dt
 				steps += 1
 			if _all_battles_over():
-				_finish_battles()
+				# 決着してすぐには切り替えず、少し余韻を残す（爆発や勝ち負けを見せる）
+				if battle_end_left < 0.0:
+					battle_end_left = float(data.rule("round.battle_end_delay_sec"))
+				else:
+					battle_end_left -= delta
+				if battle_end_left <= 0.0:
+					_finish_battles()
 
 
-## 3試合とも決着まで一気に進める（画面なしの試合用）
+## 3試合とも決着まで一気に進める（画面なしの試合用。「最後まで飛ばす」もこれで、余韻は待たない）
 func run_battles_to_end() -> void:
 	if phase != PHASE_BATTLE:
 		return
 	for b: Battle in battles:
 		b.sim.run_to_end()
 	_finish_battles()
+
+
+# ---- スクラップ（解体・再抽選・パーク候補の引き直し） ----
+
+## スクラップが使えるラウンドか（後半だけ使える。負けたラウンドの分は最初から貯まる）
+func scrap_unlocked() -> bool:
+	return round_no >= int(data.rule("scrap.unlock_round"))
+
+
+## パーツを解体したときにもらえるスクラップ（種類ごとの量。抽選の良さが上半分なら上乗せ）
+func scrap_value(part: PartInstance) -> int:
+	var v: int = int(data.rule("scrap.value." + part.kind))
+	var def: GameData.PartDef = data.get_part(part.def_id)
+	if def != null and Loot.roll_quality(def, part.stats) > 0.5:
+		v += int(data.rule("scrap.high_roll_bonus"))
+	return v
+
+
+## 付けていないパーツを解体してスクラップにする（組み立てとパーク選びの段階）。問題がなければ空文字
+func scrap_part(player_id: int, uid: int) -> String:
+	var p: Player = get_player(player_id)
+	var err: String = _check_scrap_use(p, [PHASE_BUILD, PHASE_LOOT])
+	if not err.is_empty():
+		return err
+	var part: PartInstance = p.find_part(uid)
+	if part == null:
+		return "手持ちにないパーツ（uid %d）" % uid
+	if _is_equipped(p, uid):
+		return "機体に付けているパーツは解体できない"
+	if int(p.pending_reroll.get("uid", -1)) == uid:
+		return "再抽選の結果を選んでいるパーツは解体できない"
+	p.hand.erase(part)
+	p.new_parts.erase(part)
+	p.scrap += scrap_value(part)
+	return ""
+
+
+## 手持ちのパーツの性能を引き直す（組み立ての段階）。結果は resolve_reroll で「元のまま／新しい性能」を選ぶまで保留する
+func reroll_part(player_id: int, uid: int) -> String:
+	var p: Player = get_player(player_id)
+	var err: String = _check_scrap_use(p, [PHASE_BUILD])
+	if not err.is_empty():
+		return err
+	if not p.pending_reroll.is_empty():
+		return "前の再抽選の結果をまだ選んでいない"
+	var part: PartInstance = p.find_part(uid)
+	if part == null:
+		return "手持ちにないパーツ（uid %d）" % uid
+	var cost: int = int(data.rule("scrap.reroll_part_cost"))
+	if p.scrap < cost:
+		return "スクラップが足りない（%d / %d）" % [p.scrap, cost]
+	var rng: Rng = _rng.fork("round/%d/reroll/%d/%d" % [round_no, p.id, p.rerolls_done])
+	p.scrap -= cost
+	p.rerolls_done += 1
+	p.pending_reroll = {"uid": uid, "stats": Loot.reroll_stats(data.get_part(part.def_id), rng)}
+	return ""
+
+
+## 再抽選の結果を選ぶ。take_new なら新しい性能にし、そうでなければ元のまま（どちらでもスクラップは戻らない）
+func resolve_reroll(player_id: int, take_new: bool) -> String:
+	var p: Player = get_player(player_id)
+	if p == null or p.pending_reroll.is_empty():
+		return "選ぶ再抽選の結果がない"
+	var part: PartInstance = p.find_part(int(p.pending_reroll["uid"]))
+	if take_new and part != null:
+		var new_stats: Dictionary = p.pending_reroll["stats"]
+		for k: Variant in new_stats:
+			part.stats[str(k)] = float(new_stats[k])
+	p.pending_reroll = {}
+	return ""
+
+
+## パークの候補を引き直す（パーク選びの段階、1ラウンドに決まった回数まで）。問題がなければ空文字
+func reroll_perk_choices(player_id: int) -> String:
+	var p: Player = get_player(player_id)
+	var err: String = _check_scrap_use(p, [PHASE_LOOT])
+	if not err.is_empty():
+		return err
+	if p.done_this_phase:
+		return "このラウンドのパークはもう選んだ"
+	var limit: int = int(data.rule("scrap.reroll_perks_per_round"))
+	if p.perk_rerolls_used >= limit:
+		return "このラウンドの引き直しはもう使い切った（%d 回まで）" % limit
+	var cost: int = int(data.rule("scrap.reroll_perks_cost"))
+	if p.scrap < cost:
+		return "スクラップが足りない（%d / %d）" % [p.scrap, cost]
+	var rng: Rng = _rng.fork("round/%d/perk_reroll/%d/%d" % [round_no, p.id, p.perk_rerolls_used])
+	p.scrap -= cost
+	p.perk_rerolls_used += 1
+	p.perk_choices = Loot.perk_choices(data, rng, int(data.rule("loot.perk_choices")))
+	return ""
+
+
+func _check_scrap_use(p: Player, phases: Array) -> String:
+	if p == null or not p.alive:
+		return "そのプレイヤーは参加していない"
+	if not phases.has(phase):
+		return "今はスクラップを使えない段階"
+	if not scrap_unlocked():
+		return "スクラップは %d ラウンド目から使える" % int(data.rule("scrap.unlock_round"))
+	return ""
+
+
+func _is_equipped(p: Player, uid: int) -> bool:
+	if p.build == null:
+		return false
+	for part: PartInstance in [p.build.frame] + p.build.weapons + p.build.skills:
+		if part != null and part.uid == uid:
+			return true
+	return false
+
+
+## CPU のスクラップの使い方：付けていないパーツを解体し、決まった回数まで再抽選して、良くなったときだけ新しい性能を取る
+func _cpu_upkeep(p: Player) -> void:
+	if not scrap_unlocked() or p.is_human or not p.alive:
+		return
+	var plan: Dictionary = _agents.plan_upkeep(data, p, _rng.fork("round/%d/upkeep/%d" % [round_no, p.id]))
+	for uid: Variant in plan.get("scrap", []):
+		scrap_part(p.id, int(uid))
+	for uid: Variant in plan.get("reroll", []):
+		if not reroll_part(p.id, int(uid)).is_empty():
+			break
+		var part: PartInstance = p.find_part(int(uid))
+		resolve_reroll(p.id, _agents.accept_reroll(data, part, p.pending_reroll["stats"]))
 
 
 # ---- ラウンド結果、配布とパーク ----
@@ -251,6 +382,7 @@ func finish_round_result() -> void:
 		p.new_parts = Loot.deal_round(data, rng, count, min_kind, _take_uids(count))
 		p.hand.append_array(p.new_parts)
 		p.perk_choices = Loot.perk_choices(data, rng, perk_count)
+		p.perk_rerolls_used = 0
 		p.done_this_phase = false
 	phase = PHASE_LOOT
 
@@ -311,12 +443,14 @@ func _start_round() -> void:
 	round_no += 1
 	for p: Player in players:
 		p.done_this_phase = false
-		p.new_parts = []
 	phase_time_left = float(data.rule("round.build_time_limit_sec"))
 	phase = PHASE_BUILD
 
 
 func _start_battles() -> void:
+	# 配られたパーツの記録は、組み立ての画面で NEW を出し終えたら消す（画面用の記録で、計算には使わない）
+	for p: Player in players:
+		p.new_parts = []
 	var ids: Array[int] = []
 	for p: Player in alive_players():
 		ids.append(p.id)
@@ -334,6 +468,7 @@ func _start_battles() -> void:
 	if int(pr["leftover"]) >= 0 and not _ghost.is_empty():
 		_add_battle(int(pr["leftover"]), GHOST_ID)
 	_accum = 0.0
+	battle_end_left = -1.0
 	phase = PHASE_BATTLE
 
 
@@ -363,7 +498,7 @@ func _add_battle(a: int, b: int) -> void:
 	var brains: Array = []
 	for side: int in 2:
 		brains.append(_agents.make_brain(humans[side], _rng.fork("round/%d/brain/%d/%d" % [round_no, k, side]),
-			ids[side]))
+			ids[side], humans[1 - side]))
 	bt.prompts = prompts.duplicate()
 	bt.sim = BattleSim.new(data, builds, brains, prompts, names, _rng.fork("round/%d/battle/%d" % [round_no, k]))
 	battles.append(bt)
@@ -418,6 +553,16 @@ func _finish_battles() -> void:
 	var alive_before: int = health_now.size()
 	for id: int in dmg:
 		players[id].health -= float(dmg[id])
+	var bonus: int = int(data.rule("scrap.loss_bonus"))
+	var scrap_gain: Dictionary = {}
+	for e: Dictionary in entries:
+		var w: int = int(e["winner"])
+		if w == -2:
+			continue  # 引き分けはもらえない
+		var loser: int = int(e["b"]) if w == int(e["a"]) else int(e["a"])
+		if loser != GHOST_ID:
+			players[loser].scrap += bonus
+			scrap_gain[loser] = scrap_gain.get(loser, 0) + bonus
 
 	# 脱落：体力がよりマイナスの人を下の順位にする
 	var out_now: Array[Player] = []
@@ -450,7 +595,7 @@ func _finish_battles() -> void:
 	for p: Player in out_now:
 		eliminated.append(p.id)
 	history.append({"round": round_no, "battles": entries, "damage": dmg, "eliminated": eliminated,
-		"health": health_after, "ranks": rank})
+		"health": health_after, "ranks": rank, "scrap_gain": scrap_gain})
 	phase = PHASE_ROUND_RESULT
 
 

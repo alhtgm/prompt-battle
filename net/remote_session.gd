@@ -1,5 +1,5 @@
 # 通信対戦のクライアントが持つ、試合（MatchSession）の写し。サーバーから届く状態を組み立て直し、同じ名前で読めるようにする。
-# 操作（パーツ選び・組み立て・パーク選び）はサーバーへ送るだけで、締め切りや進行はサーバーが決める（finish_* は何もしない）。
+# 操作（パーツ選び・組み立て・パーク選び・スクラップ）はサーバーへ送るだけで、締め切りや進行はサーバーが決める（finish_* は何もしない）。
 extends RefCounted
 
 const GameData := preload("res://core/game_data.gd")
@@ -7,6 +7,7 @@ const PartInstance := preload("res://core/part_instance.gd")
 const Build := preload("res://core/build.gd")
 const Player := preload("res://core/player.gd")
 const Protocol := preload("res://net/protocol.gd")
+const Loot := preload("res://core/loot.gd")
 const RemoteSim := preload("res://net/remote_sim.gd")
 
 const GHOST_ID: int = -1
@@ -119,6 +120,10 @@ func apply_state(st: Dictionary) -> void:
 		me.prompt = str(mine.get("prompt", ""))
 		me.perk_choices.assign(mine.get("perk_choices", []))
 		me.done_this_phase = bool(mine.get("done", false))
+		me.scrap = int(mine.get("scrap", 0))
+		var pr: Variant = mine.get("pending_reroll", {})
+		me.pending_reroll = (pr as Dictionary).duplicate(true) if pr is Dictionary else {}
+		me.perk_rerolls_used = int(mine.get("perk_rerolls_used", 0))
 
 	draft_offer = {}
 	var offer: Dictionary = st.get("draft_offer", {})
@@ -180,17 +185,22 @@ func submit_build(_player_id: int, frame_uid: int, weapon_uids: Array, skill_uid
 	var me: Player = get_player(my_id)
 	if me == null or not me.alive:
 		return "参加していない"
-	var b: Build = _build_from_uids(me, {"frame": frame_uid, "weapons": weapon_uids, "skills": skill_uids})
-	var err: String = b.validate(data, me.extra_weapon_slots(data), me.extra_skill_slots(data))
-	if not err.is_empty():
-		return err
-	if prompt.length() > me.prompt_max_chars(data):
-		return "プロンプトが長すぎる（%d / %d 文字）" % [prompt.length(), me.prompt_max_chars(data)]
+	var r: Dictionary = me.assemble_build(data, frame_uid, weapon_uids, skill_uids, prompt)
+	if not str(r["error"]).is_empty():
+		return r["error"]
 	_send.call(Protocol.SUBMIT_BUILD, {"frame": frame_uid, "weapons": weapon_uids, "skills": skill_uids, "prompt": prompt})
-	me.build = b
+	me.build = r["build"]
 	me.prompt = prompt
 	_mark_done()
 	return ""
+
+
+## 出撃できるかだけを調べる（状態は変えない）。確かめ方は試合側（core）と同じ
+func check_build(_player_id: int, frame_uid: int, weapon_uids: Array, skill_uids: Array, prompt: String) -> String:
+	var me: Player = get_player(my_id)
+	if me == null or not me.alive:
+		return "参加していない"
+	return me.assemble_build(data, frame_uid, weapon_uids, skill_uids, prompt)["error"]
 
 
 func choose_perk(_player_id: int, perk_id: String) -> String:
@@ -203,6 +213,52 @@ func choose_perk(_player_id: int, perk_id: String) -> String:
 		return "候補にないパーク"
 	_send.call(Protocol.CHOOSE_PERK, {"perk": perk_id})
 	_mark_done()
+	return ""
+
+
+## スクラップが使えるラウンドか（試合と同じ決まり）
+func scrap_unlocked() -> bool:
+	return round_no >= int(data.rule("scrap.unlock_round"))
+
+
+## パーツを解体したときにもらえるスクラップ（試合と同じ計算。表示用）
+func scrap_value(part: PartInstance) -> int:
+	var v: int = int(data.rule("scrap.value." + part.kind))
+	var def: GameData.PartDef = data.get_part(part.def_id)
+	if def != null and Loot.roll_quality(def, part.stats) > 0.5:
+		v += int(data.rule("scrap.high_roll_bonus"))
+	return v
+
+
+## スクラップの操作。結果（増減や再抽選の新しい性能）はサーバーから届く状態で分かる
+func scrap_part(_player_id: int, uid: int) -> String:
+	_send.call(Protocol.SCRAP_PART, {"uid": uid})
+	return ""
+
+
+func reroll_part(_player_id: int, uid: int) -> String:
+	var me: Player = get_player(my_id)
+	var cost: int = int(data.rule("scrap.reroll_part_cost"))
+	if me != null and me.scrap < cost:
+		return "スクラップが足りない（%d / %d）" % [me.scrap, cost]
+	_send.call(Protocol.REROLL_PART, {"uid": uid})
+	return ""
+
+
+func resolve_reroll(_player_id: int, take_new: bool) -> String:
+	var me: Player = get_player(my_id)
+	if me != null:
+		me.pending_reroll = {}  # 次の状態が届くまでの間、選んだ画面を閉じておく
+	_send.call(Protocol.RESOLVE_REROLL, {"take_new": take_new})
+	return ""
+
+
+func reroll_perk_choices(_player_id: int) -> String:
+	var me: Player = get_player(my_id)
+	var cost: int = int(data.rule("scrap.reroll_perks_cost"))
+	if me != null and me.scrap < cost:
+		return "スクラップが足りない（%d / %d）" % [me.scrap, cost]
+	_send.call(Protocol.REROLL_PERKS, {})
 	return ""
 
 

@@ -19,6 +19,32 @@ static func roll_part(def: GameData.PartDef, rng: Rng, uid: int) -> PartInstance
 	return inst
 
 
+## 小さいほど良いステータス（抽選の良さを測るときに向きを逆にする）
+const LOWER_IS_BETTER: Array[String] = ["speed_penalty"]
+
+
+## 抽選の良さ（0〜1）。ステータスごとに、範囲のどのあたりに入ったかの平均。振れないステータスしかなければ 0.5
+static func roll_quality(def: GameData.PartDef, stats: Dictionary) -> float:
+	var total: float = 0.0
+	var n: int = 0
+	for stat_name: String in def.stat_names():
+		var r: GameData.StatRange = def.stats[stat_name]
+		if r.max_value <= r.min_value or not stats.has(stat_name):
+			continue
+		var t: float = clampf((float(stats[stat_name]) - r.min_value) / (r.max_value - r.min_value), 0.0, 1.0)
+		total += 1.0 - t if LOWER_IS_BETTER.has(stat_name) else t
+		n += 1
+	return total / float(n) if n > 0 else 0.5
+
+
+## パーツの性能を引き直した値（元のパーツは変えない）
+static func reroll_stats(def: GameData.PartDef, rng: Rng) -> Dictionary:
+	var out: Dictionary = {}
+	for stat_name: String in def.stat_names():
+		out[stat_name] = roll_stat(def.stats[stat_name], rng)
+	return out
+
+
 ## 範囲内で1つの値を抽選し、刻みに丸める
 static func roll_stat(r: GameData.StatRange, rng: Rng) -> float:
 	var v: float = rng.randf_range(r.min_value, r.max_value)

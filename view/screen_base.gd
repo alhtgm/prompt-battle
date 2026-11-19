@@ -96,8 +96,29 @@ func add_columns(left_ratio: float = 1.4) -> Array[VBoxContainer]:
 
 
 ## 体力の一覧（生き残りが上）
-func add_standings(parent: Control = null) -> void:
+func add_standings(parent: Control = null, font_size: int = 16) -> void:
+	# 名前・体力のバー・数字・状態を表に並べ、差がひと目で分かるようにする
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 2)
+	(parent if parent != null else box).add_child(grid)
+	var full: float = float(main.data.rule("initial_health"))
 	for p: Variant in session().standings():
 		var status: String = "%d位" % p.place if p.place > 0 else "生存"
 		var col: Color = COL_ACCENT if p.id == main.human_id else (COL_TEXT if p.alive else COL_DIM)
-		add_label("%s　体力 %d　%s　パーク %d個" % [p.name, roundi(p.health), status, p.perks.size()], 16, col, parent)
+		_cell(add_label(p.name, font_size, col, grid))
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(120, 10)
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		bar.max_value = full
+		bar.value = p.health
+		grid.add_child(bar)
+		_cell(add_label("体力 %d" % roundi(p.health), font_size, col, grid))
+		_cell(add_label("%s　パーク %d個" % [status, p.perks.size()], font_size, COL_DIM if p.alive else col, grid))
+
+
+## 表の中の文字は折り返さない（折り返すと幅が0になって縦に並んでしまう）
+func _cell(l: Label) -> void:
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF
