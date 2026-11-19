@@ -76,6 +76,7 @@ const NUMBER_RULES: Array = [
 	["agent.mock_delay_min_sec", 0, false],
 	["agent.mock_delay_max_sec", 0, false],
 	["round.build_time_limit_sec", 1, false],
+	["round.battle_end_delay_sec", 0, false],
 	["round.prompt_max_chars", 1, true],
 	["damage.rank_coef", 0, false],
 	["damage.margin_coef", 0, false],
