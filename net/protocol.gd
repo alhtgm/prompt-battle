@@ -108,7 +108,7 @@ static func battle_frame(s: RefCounted, max_log: int) -> Dictionary:
 				ammo.append(w.ammo)
 			robots.append({
 				"x": r.x, "z": r.z, "th": r.th, "hp": r.hp, "stun": r.stun, "fell": r.fell, "intent": r.intent,
-				"say": r.say, "repairing": r.repairing, "repair_left": r.repair_left, "skills": skills, "ammo": ammo,
+				"say": r.say, "skills": skills, "ammo": ammo,
 				"fuse": r.fuse, "fuse_total": r.fuse_total, "self_destructed": r.self_destructed,
 				"hook": [r.hook_state, r.hook_x, r.hook_z, r.hook_slot], "flipped": r.flipped,
 			})
@@ -116,8 +116,11 @@ static func battle_frame(s: RefCounted, max_log: int) -> Dictionary:
 		for sh: Variant in sim.shots:
 			shots.append([sh.x, sh.z, sh.vx, sh.vz, sh.id, sh.def_id])
 		var first: int = maxi(0, sim.log.size() - max_log)
+		var packs: Array = []
+		for p: Variant in sim.packs:
+			packs.append(p.duplicate())
 		battles.append({
-			"tick": sim.tick, "over": sim.over, "result": sim.result, "robots": robots, "shots": shots,
+			"tick": sim.tick, "over": sim.over, "result": sim.result, "robots": robots, "shots": shots, "packs": packs,
 			"log_from": first, "log": sim.log.slice(first),
 		})
 	return {"round_no": s.round_no, "battles": battles}

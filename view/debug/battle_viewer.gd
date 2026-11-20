@@ -22,7 +22,7 @@ const PROMPTS: Array[String] = [
 
 const INTENT_LABELS: Dictionary = {
 	"charge": "突撃", "flank": "回り込み", "keep_distance": "距離を取る", "retreat": "逃げる",
-	"push_to_pit": "穴へ押し込む", "go_repair": "修理に向かう", "circle": "周りを回る", "hold": "その場で待つ",
+	"push_to_pit": "穴へ押し込む", "go_repair": "回復パックへ", "circle": "周りを回る", "hold": "その場で待つ",
 }
 const REASON_LABELS: Dictionary = {"destroyed": "破壊", "pit": "穴落ち", "time": "時間切れ"}
 
@@ -39,7 +39,7 @@ const COL_FLOOR := Color(0.16, 0.16, 0.17)
 const COL_WALL := Color(0.45, 0.45, 0.45)
 const COL_PIT := Color(0.0, 0.0, 0.0)
 const COL_PIT_EDGE := Color(0.75, 0.2, 0.15)
-const COL_PAD := Color(0.15, 0.45, 0.25)
+const COL_PAD := Color(0.45, 0.85, 1.0)
 const COL_TEXT := Color(0.9, 0.9, 0.88)
 const COL_DIM := Color(0.6, 0.6, 0.58)
 const ROBOT_COLORS: Array[Color] = [Color(0.3, 0.6, 1.0), Color(1.0, 0.55, 0.2)]
@@ -170,8 +170,8 @@ func _collect_events() -> void:
 				_log(t + "%s が %s を使った" % [_name(e["robot"]), e["skill"]])
 			"fall":
 				_log(t + "%s が穴に落ちた！" % _name(e["robot"]))
-			"repair":
-				_log(t + "%s が修理中" % _name(e["robot"]))
+			"pack":
+				_log(t + "%s が回復パック（%s）を取った +%d" % [_name(e["robot"]), "大" if e["big"] else "小", roundi(e["heal"])])
 			"ammo_out":
 				_log(t + "%s の %s が弾切れ" % [_name(e["robot"]), e["weapon"]])
 			"over":
@@ -202,8 +202,10 @@ func _draw() -> void:
 	var arena: Dictionary = data.rules["battle"]["arena"]
 	draw_rect(Rect2(ARENA_ORIGIN, Vector2(ARENA_PX, ARENA_PX)), COL_FLOOR)
 	draw_rect(Rect2(ARENA_ORIGIN, Vector2(ARENA_PX, ARENA_PX)), COL_WALL, false, 3.0)
-	for pad: Dictionary in arena["repair_pads"]:
-		draw_circle(_to_screen(pad["x"], pad["z"]), _px(pad["r"]), COL_PAD)
+	# 回復パック（大は大きく描く）
+	for p: Dictionary in sim.packs:
+		if p["active"]:
+			draw_circle(_to_screen(p["x"], p["z"]), _px(0.9 if p["big"] else 0.6), COL_PAD)
 	for pit: Dictionary in arena["pits"]:
 		var c: Vector2 = _to_screen(pit["x"], pit["z"])
 		draw_circle(c, _px(pit["r"]), COL_PIT)
@@ -231,8 +233,6 @@ func _draw_robot(r: Robot) -> void:
 	for s: Robot.SkillSlot in r.skills:
 		if s.active_t > 0.0:
 			draw_arc(c, rad + 10.0, 0.0, TAU, 24, Color(0.5, 1.0, 1.0, 0.8), 2.0)
-	if r.repairing:
-		draw_arc(c, rad + 4.0, 0.0, TAU, 24, Color(0.3, 1.0, 0.4), 2.0)
 	# HPの帯と一言
 	var bar := Rect2(c + Vector2(-rad, -rad - 12.0), Vector2(rad * 2.0, 5.0))
 	draw_rect(bar, Color(0.3, 0.05, 0.05))

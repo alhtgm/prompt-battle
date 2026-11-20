@@ -7,7 +7,7 @@ const PartInstance := preload("res://core/part_instance.gd")
 const KIND_LABELS: Dictionary = {"frame": "フレーム", "weapon": "武器", "skill": "スキル"}
 const INTENT_LABELS: Dictionary = {
 	"charge": "突撃", "flank": "回り込み", "keep_distance": "距離を取る", "retreat": "逃げる",
-	"push_to_pit": "穴へ押し込む", "go_repair": "修理に向かう", "circle": "周りを回る", "hold": "その場で待つ",
+	"push_to_pit": "穴へ押し込む", "go_repair": "回復パックへ", "circle": "周りを回る", "hold": "その場で待つ",
 }
 const REASON_LABELS: Dictionary = {
 	"destroyed": "破壊", "pit": "穴落ち", "time": "時間切れ", "self_destruct": "自爆で相打ち",
@@ -167,8 +167,8 @@ static func event_line(e: Dictionary, names: Array) -> String:
 			return t + ("%s が自爆！ %d ダメージ" % [who, roundi(e["damage"])] if e["hit"] else "%s が自爆したが、届かなかった" % who)
 		"fall":
 			return t + "%s が穴に落ちた！" % who
-		"repair":
-			return t + "%s が修理中" % who
+		"pack":
+			return t + "%s が回復パック（%s）を取った！ HP +%d" % [who, "大" if e["big"] else "小", roundi(e["heal"])]
 		"ammo_out":
 			return t + "%s の %s が弾切れ" % [who, e["weapon"]]
 		"over":

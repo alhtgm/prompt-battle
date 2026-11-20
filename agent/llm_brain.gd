@@ -14,7 +14,7 @@ const INTENT_TEXT: Dictionary = {
 	"keep_distance": "相手を向いたまま距離を保つ（撃つ武器向き）",
 	"retreat": "相手から逃げる",
 	"push_to_pit": "相手の向こう側に回って、相手を穴へ押し込む",
-	"go_repair": "修理ステーションへ行って回復する",
+	"go_repair": "一番近い回復パックを取りに行って回復する（ダメージを受けているときだけ取れる）",
 	"circle": "相手の周りを回る",
 	"hold": "その場で相手を向いて待つ",
 }
@@ -193,7 +193,7 @@ static func build_system_prompt(prompt: String, build: Dictionary, say_max: int,
 	if text_obs:
 		lines.append("戦況は短い文で毎回渡す。プレイヤーの指示の条件（HPが減ったら、相手が穴の近くなら、弾が切れたら など）が今の戦況に当てはまるかを確かめてから方針を選ぶ。")
 	else:
-		lines.append("戦況の見方：hp は残りHPの%。enemy.dist は相手との距離（3以下で接触、10以上は遠い）。dir は相手の方向。near_pit は穴の近く。behind_me は相手が自分の後ろ側。facing_me は相手がこちらを向いている。ammo は残り弾（null は撃つ武器なし）。repair.left は修理で回復できる残り。events は前回からの出来事。")
+		lines.append("戦況の見方：hp は残りHPの%。enemy.dist は相手との距離（3以下で接触、10以上は遠い）。dir は相手の方向。near_pit は穴の近く。behind_me は相手が自分の後ろ側。facing_me は相手がこちらを向いている。ammo は残り弾（null は撃つ武器なし）。repair は一番近い回復パック（dist は距離、dir は方向、heal は回復量。null は場にない）。events は前回からの出来事。")
 	var shape: String = "{\"say\":\"一言\",\"intent\":\"方針\",\"skill\":番号かnull}" if say_first \
 		else "{\"intent\":\"方針\",\"skill\":番号かnull,\"say\":\"一言\"}"
 	lines.append("答えは %s の形だけ。say は操縦士として今の判断を自分の言葉で言う%d文字以内の日本語（指示の文をそのまま写さない）。" % [shape, say_max])
@@ -234,7 +234,7 @@ static func compact_observation(obs: Dictionary) -> Dictionary:
 		"me": {"hp": me.get("hp"), "ammo": me.get("ammo"), "stunned": me.get("stunned"),
 			"near_pit": me.get("near_pit"), "intent": me.get("intent"), "skills_ready": ready},
 		"enemy": obs.get("enemy", {}),
-		"repair": obs.get("repair", {}),
+		"repair": obs.get("repair"),
 		"events": obs.get("events", []),
 	}
 
@@ -243,7 +243,8 @@ static func compact_observation(obs: Dictionary) -> Dictionary:
 static func describe_observation(obs: Dictionary, cfg: Dictionary) -> String:
 	var me: Dictionary = obs.get("me", {})
 	var en: Dictionary = obs.get("enemy", {})
-	var rep: Dictionary = obs.get("repair", {})
+	var rep_v: Variant = obs.get("repair")
+	var rep: Dictionary = rep_v if rep_v is Dictionary else {}
 	var lines: PackedStringArray = PackedStringArray()
 	lines.append("残り%d秒。" % roundi(float(obs.get("time_left", 0.0))))
 
@@ -276,9 +277,11 @@ static func describe_observation(obs: Dictionary, cfg: Dictionary) -> String:
 	if en.get("stunned", false):
 		theirs.append("動けない")
 	lines.append("相手：" + "、".join(theirs) + "。")
-	var left: int = int(rep.get("left", 0))
-	lines.append("修理ステーション：距離%.0f、%s。" % [float(rep.get("dist", 0.0)),
-		"残り%dまで回復できる" % left if left > 0 else "もう回復できない"])
+	if rep.is_empty():
+		lines.append("回復パック：今は場にない。")
+	else:
+		lines.append("回復パック：%s、距離%.0f、HPを%d回復する。" % [rep.get("dir", ""), float(rep.get("dist", 0.0)),
+			int(rep.get("heal", 0))])
 	var events: Array = obs.get("events", [])
 	if not events.is_empty():
 		var ev: PackedStringArray = PackedStringArray()

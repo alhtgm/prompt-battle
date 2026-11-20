@@ -202,8 +202,8 @@ func test_driver_outputs_are_finite_for_every_intent() -> void:
 		var builds: Array = [Loot.random_build(data, rng, 1), Loot.random_build(data, rng, 50)]
 		var me := Robot.new()
 		var en := Robot.new()
-		me.setup(data, builds[0], 0, "A", b["arena"]["spawns"][0], b["robot"], 0.0)
-		en.setup(data, builds[1], 1, "B", b["arena"]["spawns"][1], b["robot"], 0.0)
+		me.setup(data, builds[0], 0, "A", b["arena"]["spawns"][0], b["robot"])
+		en.setup(data, builds[1], 1, "B", b["arena"]["spawns"][1], b["robot"])
 		var half: float = float(b["arena"]["half_size"])
 		me.x = rng.randf_range(-half, half)
 		me.z = rng.randf_range(-half, half)

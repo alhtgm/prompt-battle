@@ -64,6 +64,10 @@ var _say_max: int = 40
 var _blasting: bool = false
 ## 次に撃つ弾の通し番号
 var _next_shot_id: int = 1
+## 回復パック。1つは {"id", "x", "z", "big", "heal", "active", "t"}。active でなければ t 秒後に別の場所へ出る
+var packs: Array[Dictionary] = []
+var _pack_rng: Rng
+var _next_pack_id: int = 1
 ## 自爆が相手を壊したか（決着のつき方を「自爆で相打ち」にする）
 var _blast_kill: bool = false
 
@@ -83,10 +87,18 @@ func _init(game_data: GameData, builds: Array, brains: Array, prompts: Array, na
 	var spawns: Array = _b["arena"]["spawns"]
 	for i: int in 2:
 		var r := Robot.new()
-		r.setup(data, builds[i], i, str(names[i]), spawns[i], _b["robot"], float(_b["repair"]["total_per_robot"]))
+		r.setup(data, builds[i], i, str(names[i]), spawns[i], _b["robot"])
 		robots.append(r)
 	for i: int in 2:
 		_brains[i].begin(str(prompts[i]), build_summary(data, builds[i]), data.rules)
+	# 回復パックを最初から count 個置く（場所と大小は、試合の種から分けた乱数で決める）
+	_pack_rng = battle_rng.fork("health_packs")
+	# 最初の分は決まった場所（initial）に、足りない分と出直す分はランダムな場所に置く
+	var initial: Array = _b["health_packs"].get("initial", [])
+	for k: int in int(_b["health_packs"]["count"]):
+		var p: Dictionary = {"id": 0, "x": 0.0, "z": 0.0, "big": false, "heal": 0.0, "active": false, "t": 0.0}
+		packs.append(p)
+		_place_pack(p, initial[k] if k < initial.size() else {})
 
 
 ## エージェントに渡す機体の説明
@@ -143,7 +155,7 @@ func step() -> void:
 			robots[i].intent = "charge"
 			robots[i].want_skill = -1
 		_try_skill(i)  # 3. 実行役（スキルを含む）
-		controls.append(RobotDriver.drive(robots[i], robots[1 - i], _b))
+		controls.append(RobotDriver.drive(robots[i], robots[1 - i], _b, packs))
 	for i: int in 2:
 		_apply_control(robots[i], controls[i])  # 4. 物理
 	_move()
@@ -156,9 +168,10 @@ func step() -> void:
 		_hook(i)  # 5.5 ハープーンガンの釣り針（飛ぶ・引き寄せる・戻る）
 	_clamp_walls()
 	for i: int in 2:
-		_hazards(i)  # 6. 修理ステーションと穴
+		_hazards(i)  # 6. 回復パックと穴
 	for i: int in 2:
 		_fuse(i)  # 6.5 自爆装置の導火線
+	_update_packs()  # 6.6 取られた回復パックを、時間がたったら別の場所に出す
 	_check_over()  # 7. 決着
 	for e: Dictionary in events:
 		if e["type"] != "shot":
@@ -175,7 +188,10 @@ func snapshot() -> Dictionary:
 	var ss: Array = []
 	for s: Shot in shots:
 		ss.append([s.x, s.z, s.owner])
-	return {"tick": tick, "robots": rs, "shots": ss, "over": over, "result": result}
+	var ps: Array = []
+	for p: Dictionary in packs:
+		ps.append(p.duplicate())
+	return {"tick": tick, "robots": rs, "shots": ss, "packs": ps, "over": over, "result": result}
 
 
 # ---- 1. 2. 考える ----
@@ -189,7 +205,7 @@ func _think(i: int, t: float) -> void:
 	var triggered: bool = not r.trigger.is_empty() and gap >= _think_min_gap - 1e-9
 	if not due and not triggered:
 		return
-	var obs: Dictionary = Observation.build(r, robots[1 - i], t, time_left(), _b)
+	var obs: Dictionary = Observation.build(r, robots[1 - i], t, time_left(), _b, packs)
 	_brains[i].request(obs)
 	r.last_request_t = t
 	r.trigger = ""
@@ -574,7 +590,7 @@ func _drop_hook(me: Robot) -> void:
 	me.hook_slot = -1
 
 
-# ---- 6. 修理ステーションと穴 ----
+# ---- 6. 回復パックと穴 ----
 
 func _hazards(i: int) -> void:
 	var r: Robot = robots[i]
@@ -582,20 +598,21 @@ func _hazards(i: int) -> void:
 	if r.fell:
 		return
 	var arena: Dictionary = _b["arena"]
-	var rep: Dictionary = _b["repair"]
-	var on_pad: bool = false
-	for pad: Dictionary in arena["repair_pads"]:
-		if Vector2(r.x - float(pad["x"]), r.z - float(pad["z"])).length() < float(pad["r"]):
-			on_pad = true
-	var healing: bool = on_pad and r.repair_left > 0.0 and r.hp < r.max_hp and r.stun <= 0.0 \
-		and r.speed() < float(rep["max_speed"])
-	if healing:
-		var h: float = minf(float(rep["rate_per_sec"]) * dt, minf(r.repair_left, r.max_hp - r.hp))
-		r.hp += h
-		r.repair_left -= h
-		if not r.repairing:
-			events.append({"type": "repair", "robot": i})
-	r.repairing = healing
+	# 回復パック：ダメージを受けている機体が近づくと取る（倒れかけ・自爆の導火線が燃えている機体は取れない）
+	var hp_cfg: Dictionary = _b["health_packs"]
+	if r.hp > 0.0 and r.hp < r.max_hp and r.fuse < 0.0:
+		for p: Dictionary in packs:
+			if not p["active"]:
+				continue
+			if Vector2(r.x - float(p["x"]), r.z - float(p["z"])).length() <= r.radius + float(hp_cfg["pickup_radius"]):
+				var h: float = minf(float(p["heal"]), r.max_hp - r.hp)
+				r.hp += h
+				p["active"] = false
+				p["t"] = float(hp_cfg["respawn_sec"])
+				r.add_note("回復パック%s:+%d" % ["大" if p["big"] else "小", roundi(h)])
+				events.append({"type": "pack", "robot": i, "id": p["id"], "big": p["big"], "heal": h,
+					"x": p["x"], "z": p["z"]})
+				break
 
 	var margin: float = float(_b["pit"]["fall_margin"])
 	for pit: Dictionary in arena["pits"]:
@@ -685,6 +702,58 @@ func _fuse_speed(r: Robot) -> float:
 		if s.def.behavior == "self_destruct":
 			return maxf(0.0, s.def.get_fixed("speed_mult", 1.0))
 	return 1.0
+
+
+# ---- 6.6 回復パック ----
+
+## 取られた回復パックの待ち時間を進め、0 になったら別の場所に出す
+func _update_packs() -> void:
+	for p: Dictionary in packs:
+		if p["active"]:
+			continue
+		p["t"] = float(p["t"]) - dt
+		if float(p["t"]) <= 0.0:
+			_place_pack(p)
+			events.append({"type": "pack_spawn", "id": p["id"], "big": p["big"], "x": p["x"], "z": p["z"]})
+
+
+## パックを、穴・壁・機体・ほかのパックから離れたランダムな場所に置き、大か小かを決める。
+## 条件を満たす場所が見つからなければ、試した中で一番離れていた場所にする。fixed（{ x, z }）を渡すとその場所に置く
+func _place_pack(p: Dictionary, fixed: Dictionary = {}) -> void:
+	var cfg: Dictionary = _b["health_packs"]
+	var arena: Dictionary = _b["arena"]
+	var lim: float = float(arena["half_size"]) - float(cfg["wall_margin"])
+	var best := Vector2.ZERO
+	var best_score: float = -INF
+	if not fixed.is_empty():
+		# 決まった場所に置く（場所を探さない）
+		best = Vector2(float(fixed["x"]), float(fixed["z"]))
+		best_score = INF
+	for attempt: int in (0 if not fixed.is_empty() else int(cfg["spawn_attempts"])):
+		var c := Vector2(_pack_rng.randf_range(-lim, lim), _pack_rng.randf_range(-lim, lim))
+		# 一番きつい条件にどれだけ余裕があるか（0 以上なら全部満たす）
+		var score: float = INF
+		for pit: Dictionary in arena["pits"]:
+			score = minf(score, c.distance_to(Vector2(float(pit["x"]), float(pit["z"]))) - float(pit["r"]) - float(cfg["pit_margin"]))
+		for r: Robot in robots:
+			score = minf(score, c.distance_to(Vector2(r.x, r.z)) - float(cfg["robot_margin"]))
+		for o: Dictionary in packs:
+			if o != p and o["active"]:
+				score = minf(score, c.distance_to(Vector2(float(o["x"]), float(o["z"]))) - float(cfg["pack_gap"]))
+		if score > best_score:
+			best_score = score
+			best = c
+		if score >= 0.0:
+			break
+	var big: bool = _pack_rng.chance(float(cfg["large_chance"]))
+	p["id"] = _next_pack_id
+	_next_pack_id += 1
+	p["x"] = best.x
+	p["z"] = best.y
+	p["big"] = big
+	p["heal"] = float(cfg["large_heal"] if big else cfg["small_heal"])
+	p["active"] = true
+	p["t"] = 0.0
 
 
 # ---- 7. 決着 ----

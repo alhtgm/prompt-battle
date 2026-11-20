@@ -32,17 +32,14 @@ const LAMP_ANGLE_DEG: float = 70.0
 ## 斜めから弱く当てる冷たい光（影なし）
 const FILL_COLOR := Color(0.55, 0.65, 0.85)
 const FILL_ENERGY: float = 0.55
-## 穴の縁を照らす赤い光、修理ステーションの緑の光
+## 穴の縁を照らす赤い光
 const PIT_LIGHT := Color(1.0, 0.18, 0.08)
 const PIT_LIGHT_ENERGY: float = 3.0
-const PAD_LIGHT := Color(0.25, 1.0, 0.45)
-const PAD_LIGHT_ENERGY: float = 1.2
 
 # ---- 質感 ----
 const FLOOR_COLOR := Color(0.36, 0.35, 0.33)
 const WALL_COLOR := Color(0.42, 0.28, 0.18)
 const PIT_RIM_COLOR := Color(0.75, 0.6, 0.12)
-const PAD_COLOR := Color(0.15, 0.55, 0.25)
 ## 陣営の色（暗い中でも見分けられるよう、くすんだ地の色と光る目印の色）
 const SIDE_BODY: Array[Color] = [Color(0.38, 0.52, 0.66), Color(0.72, 0.45, 0.26)]
 const SIDE_GLOW: Array[Color] = [Color(0.35, 0.75, 1.0), Color(1.0, 0.55, 0.15)]
@@ -100,24 +97,20 @@ const FALL_BURST_STREAK_LEN: float = 6.0
 const FALL_BURST_FLASH: float = 12.0
 const FALL_BURST_SHAKE: float = 1.1
 
-# ---- 撃つ武器の弾（view/arena/projectile_fx.gd） ----
-## 武器の型ごとの弾の見た目。書いていない武器は曳光弾（光の筋）
-const SHOT_STYLES: Dictionary = {"weapon_rocket": "rocket"}
-const ROCKET_BODY := Color(0.36, 0.38, 0.3)
-const ROCKET_NOSE := Color(0.55, 0.16, 0.1)
-## 後ろの炎（外側と芯）と、炎が照らす光の強さ
-const ROCKET_FLAME := Color(1.0, 0.5, 0.15)
-const ROCKET_FLAME_CORE := Color(1.0, 0.9, 0.55)
-const ROCKET_LIGHT: float = 2.5
-## ロケットの爆発：秒数、火の玉の大きさ（m）、閃光の強さ
-const ROCKET_BOOM_SEC: float = 0.5
-const ROCKET_BOOM_SIZE: float = 1.4
-const ROCKET_BOOM_FLASH: float = 8.0
-## 曳光弾の色と長さ（m）、銃口の閃光の色、煙の色
-const TRACER_COLOR := Color(1.0, 0.75, 0.3)
-const TRACER_LENGTH: float = 0.9
-const MUZZLE_FLASH := Color(1.0, 0.8, 0.4)
-const SMOKE_COLOR := Color(0.5, 0.49, 0.47)
+# ---- 回復パック（view/arena/health_pack_view.gd） ----
+## 箱の水色、十字の白、十字の縁の赤
+const PACK_COLOR := Color(0.45, 0.85, 1.0)
+const PACK_CROSS := Color(1.0, 1.0, 1.0)
+const PACK_CROSS_EDGE := Color(0.85, 0.12, 0.1)
+## 箱の大きさ（m。小と大）、浮かぶ高さ（m）、水色の光の強さ
+const PACK_SIZE_SMALL: float = 0.5
+const PACK_SIZE_BIG: float = 0.75
+const PACK_HOVER: float = 0.9
+const PACK_LIGHT: float = 1.6
+## 回復した機体の演出（view/arena/heal_fx_view.gd）：緑の色、続く秒数（大は1.3倍）、周りを照らす緑の光の強さ
+const HEAL_COLOR := Color(0.25, 1.0, 0.35)
+const HEAL_FX_SEC: float = 1.3
+const HEAL_LIGHT: float = 3.0
 
 # ---- ハープーンガン（view/arena/hook_view.gd）と効果音（view/sfx.gd） ----
 const HOOK_CHAIN_COLOR := Color(0.42, 0.41, 0.4)

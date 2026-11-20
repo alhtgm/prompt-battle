@@ -95,6 +95,29 @@ static func launch() -> AudioStreamWAV:
 	return s
 
 
+## 回復パックを取ったときの音：明るい音が4つ駆け上がり、きらめきが残る
+static func heal_chime() -> AudioStreamWAV:
+	if _cache.has("heal_chime"):
+		return _cache["heal_chime"]
+	var n: int = int(RATE * 0.7)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var notes: Array[float] = [1046.5, 1318.5, 1568.0, 2093.0]
+	for k: int in n:
+		var t: float = float(k) / RATE
+		var v: float = 0.0
+		for j: int in notes.size():
+			var t0: float = j * 0.06
+			if t >= t0:
+				var dtn: float = t - t0
+				v += exp(-dtn * 6.0) * (sin(TAU * notes[j] * dtn) + 0.3 * sin(TAU * notes[j] * 2.0 * dtn)) * 0.25
+		v += sin(TAU * 4186.0 * t) * sin(TAU * 11.0 * t) * 0.05 * exp(-t * 4.0)
+		buf[k] = clampf(v * Look.SFX_VOLUME, -1.0, 1.0)
+	var s: AudioStreamWAV = _wav(buf, false)
+	_cache["heal_chime"] = s
+	return s
+
+
 ## -1〜1 の決まったノイズ（同じ番号なら同じ値）
 static func _noise(i: int) -> float:
 	var v: float = sin(float(i) * 12.9898 + 78.233) * 43758.5453

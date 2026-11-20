@@ -11,6 +11,7 @@ const ExplosionView := preload("res://view/arena/explosion_view.gd")
 const SkillFxView := preload("res://view/arena/skill_fx_view.gd")
 const FallBurstView := preload("res://view/arena/fall_burst_view.gd")
 const HookView := preload("res://view/arena/hook_view.gd")
+const HealFxView := preload("res://view/arena/heal_fx_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
@@ -33,6 +34,8 @@ var fall_burst: Node3D = null
 var _glow: Color = Color.WHITE
 ## ハープーンガンの鎖と釣り針（持っていなければ null）と、武器の先の位置（機体の中の座標。武器の番号順）
 var hook_view: Node3D = null
+## 回復パックを取ったときの緑の演出
+var heal_fx: Node3D
 var weapon_tips: Array[Vector3] = []
 var _radius: float = 0.9
 ## 自爆装置の赤い点滅の重ね塗り（点滅していなければ null）と、今点いているか
@@ -131,6 +134,10 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 			hook_view.top_level = true
 			hook_view.setup()
 	_radius = robot_radius
+	# 回復パックを取ったとき、機体を緑に光らせる演出
+	heal_fx = HealFxView.new()
+	add_child(heal_fx)
+	heal_fx.setup(body, robot_radius, top)
 	# シールド以外の効果が続くスキル（ブースターの噴射炎、オーバークロックの赤い火花）
 	skill_fx = SkillFxView.new()
 	add_child(skill_fx)
@@ -212,6 +219,8 @@ func sync(r: Variant, delta: float) -> void:
 	var alive: bool = not r.fell and not destroyed
 	skill_fx.update(booster and alive, overclock and alive, delta)
 	shield.update(shield_left > 0.0 and not r.fell and not destroyed, shield_left, delta)
+	# 回復の緑の演出（自爆装置の点滅中や爆発したあとは、体を緑に塗らない）
+	heal_fx.update(delta, blink_mat == null and explosion == null)
 	# ハープーンガンの鎖と釣り針：銃口から、釣り針（引き寄せている間は相手）まで
 	if hook_view != null:
 		var hs: String = str(r.get("hook_state")) if "hook_state" in r else ""
@@ -282,6 +291,12 @@ func _blast_range(r: Variant) -> float:
 		if s.def.behavior == "self_destruct":
 			return s.def.get_fixed("range") + _size
 	return _size * 3.0
+
+
+## 回復パックを取った（arena_view が出来事から呼ぶ）。機体を緑に光らせる。big は大のパック
+func on_heal(big: bool) -> void:
+	heal_fx.play(big)
+	heal_fx.update(0.0, blink_mat == null and explosion == null)  # その場ですぐ光らせる
 
 
 ## 被弾した（arena_view が出来事から呼ぶ）。バリアを張っていれば、攻撃が来た向きに波紋を出す

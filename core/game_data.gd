@@ -49,7 +49,8 @@ const NUMBER_GROUPS: Dictionary = {
 	"battle.robot": ["radius", "base_speed", "accel", "reverse_mult", "stun_friction",
 		"sharp_turn_deg", "sharp_turn_throttle", "arrive_dist"],
 	"battle.pit": ["fall_margin", "avoid_extra", "avoid_push", "avoid_slide", "near_dist"],
-	"battle.repair": ["total_per_robot", "rate_per_sec", "max_speed"],
+	"battle.health_packs": ["count", "respawn_sec", "large_chance", "large_heal", "small_heal", "pickup_radius",
+		"wall_margin", "pit_margin", "robot_margin", "pack_gap", "spawn_attempts"],
 	"battle.collision": ["restitution", "ram_min_speed", "ram_damage_coef", "ram_cooldown_sec"],
 	"battle.hit": ["damage_scale", "back_angle_deg", "back_mult"],
 	"battle.replan": ["big_hit_damage", "hp_low_ratio"],
@@ -292,7 +293,7 @@ func _load_rules(rules_json: Variant) -> void:
 	if not DRAW_DAMAGE_MODES.has(str(_find_rule("damage.on_draw")[1])):
 		errors.append("rules.json：damage.on_draw は %s のどれかにする" % ", ".join(DRAW_DAMAGE_MODES))
 	_check_circles("battle.arena.pits", true)
-	_check_circles("battle.arena.repair_pads", true)
+	_check_points("battle.health_packs.initial")
 	var spawns: Variant = _find_rule("battle.arena.spawns")[1]
 	if not (spawns is Array) or (spawns as Array).size() != 2:
 		errors.append("rules.json：battle.arena.spawns は2つの { x, z, facing_deg } にする")
@@ -312,7 +313,7 @@ func _load_rules(rules_json: Variant) -> void:
 					errors.append("rules.json：parts.stat_steps.%s は 0 以上の数値にする" % str(k))
 
 
-## { x, z, r } の円の配列を検査する（穴や修理ステーション）
+## { x, z, r } の円の配列を検査する（穴）
 func _check_circles(path: String, need_one: bool) -> void:
 	var v: Variant = _find_rule(path)[1]
 	if not (v is Array) or (need_one and (v as Array).is_empty()):
@@ -322,6 +323,20 @@ func _check_circles(path: String, need_one: bool) -> void:
 		if not (c is Dictionary) or not _is_finite_number(c.get("x")) or not _is_finite_number(c.get("z")) \
 				or not _is_finite_number(c.get("r")) or float(c.get("r")) <= 0.0:
 			errors.append("rules.json：%s の中身は { x, z, r }（r は正）にする" % path)
+
+
+## { x, z } の点の配列を検査する（回復パックの最初の場所）。なくてもよい
+func _check_points(path: String) -> void:
+	var found: Array = _find_rule(path)
+	if not found[0]:
+		return
+	var v: Variant = found[1]
+	if not (v is Array):
+		errors.append("rules.json：%s は { x, z } の配列にする" % path)
+		return
+	for c: Variant in v:
+		if not (c is Dictionary) or not _is_finite_number(c.get("x")) or not _is_finite_number(c.get("z")):
+			errors.append("rules.json：%s の中身は { x, z } にする" % path)
 
 
 ## [最小, 最大] の形の整数の範囲を検査する

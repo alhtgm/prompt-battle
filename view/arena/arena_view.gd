@@ -1,5 +1,5 @@
-# 3Dのアリーナ。床・壁・穴・修理ステーションを置き、バトルの状態を読んで機体・弾・火花を映す。
-# 薄暗い中に吊った電球の光、穴の底の赤い光、修理ステーションの緑の光、霧。強い被弾で画面が揺れる。
+# 3Dのアリーナ。床・壁・穴を置き、バトルの状態を読んで機体・弾・回復パック・火花を映す。
+# 薄暗い中に吊った電球の光、穴の底の赤い光、霧。強い被弾で画面が揺れる。
 # 状態は読むだけで書き換えない。カメラは2機の真ん中を斜め上から追う。見た目の値は view/look.gd。
 extends Node3D
 
@@ -7,7 +7,7 @@ const GameData := preload("res://core/game_data.gd")
 const RobotView := preload("res://view/arena/robot_view.gd")
 const Look := preload("res://view/look.gd")
 const Grime := preload("res://view/grime.gd")
-const ProjectileFx := preload("res://view/arena/projectile_fx.gd")
+const HealthPackView := preload("res://view/arena/health_pack_view.gd")
 
 ## カメラの位置（見る点からのずれ）と追いかける速さ
 const CAMERA_OFFSET := Vector3(0, 14, 12)
@@ -23,13 +23,15 @@ var data: GameData
 var sim: Variant = null
 var robot_views: Array[Node3D] = []
 var camera: Camera3D
-## 弾の見た目（view/arena/projectile_fx.gd）
-var projectiles: Node3D = null
+var _shots: Array[MeshInstance3D] = []
+## 回復パックの見た目（view/arena/health_pack_view.gd）
+var health_packs: Node3D = null
 var _sparks: Array = []  # [ノード, 残り時間]
 var _log_seen: int = 0
 var _look_at := Vector3.ZERO
 var _shake: float = 0.0
 var _time: float = 0.0
+var _shot_mat: StandardMaterial3D
 var _spark_mat: StandardMaterial3D
 
 
@@ -53,11 +55,6 @@ func setup(game_data: GameData) -> void:
 		_disc(r + 0.25, c + Vector3(0, 0.01, 0), Grime.material(Look.PIT_RIM_COLOR, 0.3, 0.8, 0.6))
 		_disc(r, c + Vector3(0, 0.02, 0), _flat(Color(0.0, 0.0, 0.0)))
 		_light(c + Vector3(0, 0.6, 0), Look.PIT_LIGHT, Look.PIT_LIGHT_ENERGY, r * 2.2)
-	# 修理ステーション：鈍く光る緑の円と、緑の光
-	for pad: Dictionary in arena["repair_pads"]:
-		var c := Vector3(float(pad["x"]), 0.0, float(pad["z"]))
-		_disc(float(pad["r"]), c + Vector3(0, 0.02, 0), Grime.material(Look.PAD_COLOR, 0.2, 0.6, 0.5, Look.PAD_LIGHT * 0.5))
-		_light(c + Vector3(0, 1.2, 0), Look.PAD_LIGHT, Look.PAD_LIGHT_ENERGY, 5.0)
 
 	camera = Camera3D.new()
 	camera.fov = 55.0
@@ -66,6 +63,7 @@ func setup(game_data: GameData) -> void:
 	camera.position = CAMERA_OFFSET
 	camera.look_at(Vector3.ZERO)
 
+	_shot_mat = _glow_mat(Color(1.0, 0.9, 0.55))
 	_spark_mat = _glow_mat(Look.SPARK_COLOR)
 
 
@@ -119,11 +117,11 @@ func bind(battle_sim: Variant) -> void:
 		add_child(v)
 		v.setup(data, sim.robots[i].build, radius, Look.SIDE_BODY[i], Look.SIDE_GLOW[i], LABEL_LIFT * i)
 		robot_views.append(v)
-	# 弾の見た目はバトルごとに作り直す
-	if projectiles != null:
-		projectiles.queue_free()
-	projectiles = ProjectileFx.new()
-	add_child(projectiles)
+	# 回復パックの見た目はバトルごとに作り直す
+	if health_packs != null:
+		health_packs.queue_free()
+	health_packs = HealthPackView.new()
+	add_child(health_packs)
 	_log_seen = sim.log.size()
 	sync(0.0)
 	_look_at = _midpoint()
@@ -139,7 +137,9 @@ func sync(delta: float) -> void:
 	_time += delta
 	for i: int in 2:
 		robot_views[i].sync(sim.robots[i], delta)
-	_sync_shots(delta)
+	_sync_shots()
+	if health_packs != null and health_packs.is_inside_tree() and "packs" in sim:
+		health_packs.sync(sim.packs, delta)
 	_spawn_sparks()
 	_update_sparks(delta)
 	_look_at = _look_at.lerp(_midpoint(), minf(1.0, CAMERA_FOLLOW * delta))
@@ -157,10 +157,20 @@ func _midpoint() -> Vector3:
 		clampf((a.z + b.z) * 0.5, -CAMERA_LIMIT, CAMERA_LIMIT))
 
 
-## 弾の見た目（ロケット・曳光弾、発射と着弾の演出）を合わせる
-func _sync_shots(delta: float) -> void:
-	if projectiles != null and projectiles.is_inside_tree():
-		projectiles.sync(sim.shots, delta)
+func _sync_shots() -> void:
+	while _shots.size() < sim.shots.size():
+		var m := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.18, 0.18, 0.18)
+		m.mesh = mesh
+		m.material_override = _shot_mat
+		add_child(m)
+		_shots.append(m)
+	for k: int in _shots.size():
+		var on: bool = k < sim.shots.size()
+		_shots[k].visible = on
+		if on:
+			_shots[k].position = Vector3(sim.shots[k].x, 0.9, sim.shots[k].z)
 
 
 ## 新しく起きた出来事から、火花・画面の揺れを出す
@@ -169,6 +179,9 @@ func _spawn_sparks() -> void:
 		var e: Dictionary = sim.log[_log_seen]
 		_log_seen += 1
 		var t: String = e["type"]
+		if t == "pack":
+			robot_views[int(e["robot"])].on_heal(bool(e.get("big", false)))  # 回復した機体を緑に光らせる
+			continue
 		if t == "self_destruct":
 			_shake = maxf(_shake, Look.SELF_DESTRUCT_SHAKE)  # 自爆（爆発そのものは robot_view が出す）
 			continue

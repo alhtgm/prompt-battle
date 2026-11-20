@@ -59,8 +59,6 @@ var stun: float = 0.0
 ## ひっくり返されているか（リフターで。EMP やハープーンガンで止められているだけなら false）
 var flipped: bool = false
 var ram_cd: float = 0.0
-var repair_left: float = 0.0
-var repairing: bool = false
 var fell: bool = false
 ## 回り込みや周回で回る向き（1 か -1）
 var side: float = 1.0
@@ -96,7 +94,7 @@ var enemy_was_near_pit: bool = false
 
 
 func setup(data: GameData, b: Build, idx: int, robot_name: String, spawn: Dictionary,
-		robot_cfg: Dictionary, repair_total: float) -> void:
+		robot_cfg: Dictionary) -> void:
 	index = idx
 	name = robot_name
 	build = b
@@ -110,7 +108,6 @@ func setup(data: GameData, b: Build, idx: int, robot_name: String, spawn: Dictio
 	turn_rate = deg_to_rad(fdef.get_fixed("turn_rate_deg"))
 	max_speed = float(robot_cfg["base_speed"]) * maxf(0.0, 1.0 - b.frame.get_stat("speed_penalty"))
 	radius = float(robot_cfg["radius"])
-	repair_left = repair_total
 	for w: PartInstance in b.weapons:
 		var ws := WeaponSlot.new()
 		ws.inst = w
@@ -183,7 +180,7 @@ func to_dict() -> Dictionary:
 	return {
 		"x": x, "z": z, "th": th, "vx": vx, "vz": vz, "hp": hp, "max_hp": max_hp,
 		"stun": stun, "flipped": flipped, "fell": fell, "intent": intent, "say": say, "dealt": dealt,
-		"repair_left": repair_left, "weapons": ws, "skills": ss,
+		"weapons": ws, "skills": ss,
 		"fuse": fuse, "self_destructed": self_destructed,
 		"hook": [hook_state, hook_x, hook_z, hook_slot],
 	}

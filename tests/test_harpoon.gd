@@ -34,7 +34,9 @@ func _sim(data: GameData, seed_value: int) -> BattleSim:
 			b.weapons.append(Loot.roll_part(data.get_part("weapon_harpoon"), setup, 50))
 		builds.append(b)
 	var brains: Array = [MockBrain.new(rng.fork("brain/0")), MockBrain.new(rng.fork("brain/1"))]
-	return BattleSim.new(data, builds, brains, ["", ""], ["A", "B"], rng.fork("battle"))
+	var sim := BattleSim.new(data, builds, brains, ["", ""], ["A", "B"], rng.fork("battle"))
+	sim.packs.clear()  # 回復パックで回復しないように（ハープーンガンの働きだけを見る）
+	return sim
 
 
 ## 0番を (ax, az) に置いて相手の方を向かせ、1番を (bx, bz) に置く。0番は動かさない（向きだけ）
