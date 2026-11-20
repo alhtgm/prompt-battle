@@ -121,6 +121,14 @@ func _on_packet(peer_id: int, packet: PackedByteArray) -> void:
 					_arr(msg.get("skills")), str(msg.get("prompt", ""))))
 		Protocol.CHOOSE_PERK:
 			_op(peer_id, func(pid: int) -> String: return session.choose_perk(pid, str(msg.get("perk", ""))))
+		Protocol.SCRAP_PART:
+			_op(peer_id, func(pid: int) -> String: return session.scrap_part(pid, int(msg.get("uid", -1))))
+		Protocol.REROLL_PART:
+			_op(peer_id, func(pid: int) -> String: return session.reroll_part(pid, int(msg.get("uid", -1))))
+		Protocol.RESOLVE_REROLL:
+			_op(peer_id, func(pid: int) -> String: return session.resolve_reroll(pid, bool(msg.get("take_new", false))))
+		Protocol.REROLL_PERKS:
+			_op(peer_id, func(pid: int) -> String: return session.reroll_perk_choices(pid))
 		Protocol.BRAIN_ANSWER:
 			var b: Variant = _brains.get(int(msg.get("key", 0)))
 			if b != null and player_of.get(peer_id, -1) == b.player_id and msg.get("answer") is Dictionary:

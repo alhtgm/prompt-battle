@@ -27,6 +27,14 @@ var new_parts: Array[PartInstance] = []
 var perk_choices: Array[String] = []
 ## 今の段階の操作を済ませたか（人間用）
 var done_this_phase: bool = false
+## スクラップ（ポイント）。解体と負けたラウンドで増え、再抽選と引き直しで減る（0 未満にならない）
+var scrap: int = 0
+## 再抽選の結果待ち：{"uid": パーツの uid, "stats": 新しい性能}。元のまま／新しい性能を選ぶまで残る（空なら待ちなし）
+var pending_reroll: Dictionary = {}
+## 再抽選をした回数（乱数の名前に使い、同じ種なら同じ結果にする）
+var rerolls_done: int = 0
+## このラウンドでパーク候補を引き直した回数
+var perk_rerolls_used: int = 0
 
 
 func find_part(uid: int) -> PartInstance:

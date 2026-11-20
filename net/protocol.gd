@@ -2,7 +2,8 @@
 # 状態の組み立ては「見る人」ごとに行い、見せてはいけないもの（生き残っている間の相手のプロンプト、ほかの人の手持ち）は入れない。
 extends RefCounted
 
-const VERSION: int = 1
+## スクラップの操作を足したので 2（違う版どうしはつながらない）
+const VERSION: int = 2
 
 # クライアント → サーバー
 const HELLO: String = "hello"
@@ -10,6 +11,10 @@ const START: String = "start"
 const DRAFT_PICK: String = "draft_pick"
 const SUBMIT_BUILD: String = "submit_build"
 const CHOOSE_PERK: String = "choose_perk"
+const SCRAP_PART: String = "scrap_part"
+const REROLL_PART: String = "reroll_part"
+const RESOLVE_REROLL: String = "resolve_reroll"
+const REROLL_PERKS: String = "reroll_perks"
 const BRAIN_ANSWER: String = "brain_answer"
 
 # サーバー → クライアント
@@ -65,7 +70,9 @@ static func session_state(s: RefCounted, viewer_id: int, extra: Dictionary) -> D
 				sk.append(part.uid)
 			build = {"frame": me.build.frame.uid, "weapons": w, "skills": sk}
 		mine = {"hand": hand, "new_parts": new_parts, "build": build, "prompt": me.prompt,
-			"perk_choices": me.perk_choices.duplicate(), "done": me.done_this_phase}
+			"perk_choices": me.perk_choices.duplicate(), "done": me.done_this_phase,
+			"scrap": me.scrap, "pending_reroll": me.pending_reroll.duplicate(true),
+			"perk_rerolls_used": me.perk_rerolls_used}
 	var offer: Dictionary = {}
 	for kind: Variant in s.draft_offer:
 		var parts: Array = []

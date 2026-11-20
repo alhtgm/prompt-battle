@@ -79,3 +79,17 @@ func plan_build(data: GameData, player: Player, rng: Rng) -> Dictionary:
 
 func pick_perk(choices: Array[String], rng: Rng) -> String:
 	return CpuPlanner.pick_perk(choices, rng)
+
+
+## スクラップの使い方（付けていないパーツの解体と、再抽選する順番）
+func plan_upkeep(data: GameData, player: Player, rng: Rng) -> Dictionary:
+	var equipped: Array = []
+	if player.build != null:
+		for part: Variant in [player.build.frame] + player.build.weapons + player.build.skills:
+			equipped.append(part.uid)
+	return CpuPlanner.plan_upkeep(data, player.hand, equipped, rng)
+
+
+## 再抽選の結果を取るか
+func accept_reroll(data: GameData, part: Variant, new_stats: Dictionary) -> bool:
+	return CpuPlanner.accept_reroll(data, part, new_stats)

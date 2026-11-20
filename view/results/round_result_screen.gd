@@ -15,6 +15,8 @@ var stamp_word: String = ""
 var stamp_tween: Tween = null
 ## ダメージの内訳の行（負けていなければ空）
 var breakdown_lines: Array[Label] = []
+## 負けたラウンドにもらったスクラップの行（もらっていなければ null）
+var scrap_gain_label: Label = null
 ## プレイヤーID → 体力バー
 var bars: Dictionary = {}
 var _countdown: Label = null
@@ -91,6 +93,9 @@ func _add_my_result(h: Dictionary) -> void:
 			head = "%s に負けた（%s、%.0f秒）" % [opp, how, e["time"]]
 		add_label(head, 22, COL_TEXT, info)
 		_add_breakdown(h, e, w, info)
+		var gain: int = int(h.get("scrap_gain", {}).get(id, 0))
+		if gain > 0:
+			scrap_gain_label = add_label("スクラップ +%d（負けたラウンドの分。後半の整備で使える）" % gain, 16, Look.UI_ACCENT, info)
 		if h["eliminated"].has(id):
 			add_label("体力が0になり脱落（%d位）" % me().place, 20, COL_BAD, info)
 		return
