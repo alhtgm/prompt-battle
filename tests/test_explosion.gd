@@ -17,6 +17,9 @@ class FakeRobot:
 	var stun: float = 0.0
 	var fell: bool = false
 	var hp: float = 100.0
+	var fuse: float = -1.0
+	var fuse_total: float = 0.0
+	var self_destructed: bool = false
 	var name: String = "テスト"
 	var say: String = ""
 	var skills: Array = []
@@ -101,5 +104,39 @@ func test_robot_that_fell_does_not_explode() -> void:
 	r.hp = 0.0
 	v.sync(r, DT)
 	check(v.explosion == null, "穴に落ちた機体は爆発しない")
+	v.queue_free()
+	await _frame()
+
+
+## 自爆装置：導火線が燃えている間は赤く点滅し、だんだん速くなり、自爆すると大きく爆発する
+func test_fuse_blinks_faster_then_big_explosion() -> void:
+	var data := GameData.new()
+	data.load_dir()
+	var v: Node3D = _make_view(data)
+	var r := FakeRobot.new()
+	r.hp = 0.0
+	r.fuse_total = 3.0
+	var toggles: Array = [0, 0]  # [最初の1秒, 最後の1秒]
+	var last: bool = false
+	var t: float = 0.0
+	while t < 3.0:
+		r.fuse = 3.0 - t
+		v.sync(r, DT)
+		check(v.explosion == null or t < 0.0, "導火線が燃えている間は爆発しない")
+		if v.blink_on != last:
+			if t < 1.0:
+				toggles[0] += 1
+			elif t >= 2.0:
+				toggles[1] += 1
+		last = v.blink_on
+		t += DT
+	check(v.blink_mat != null, "導火線が燃えている間は赤い重ね塗りがかかる")
+	check(toggles[1] > toggles[0] * 2, "自爆が近いほど点滅が速い（最初の1秒 %d 回、最後の1秒 %d 回）" % toggles)
+	r.fuse = -1.0
+	r.self_destructed = true
+	v.sync(r, DT)
+	check(v.explosion != null, "自爆すると爆発する")
+	check(v.blink_mat == null, "爆発したら点滅は止まる")
+	check(v.explosion.pieces.size() >= 3, "部品が飛び散る")
 	v.queue_free()
 	await _frame()

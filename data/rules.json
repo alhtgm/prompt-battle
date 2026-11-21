@@ -7,6 +7,7 @@
     "battle.draw_hp_ratio_diff": "時間切れで残りHPの割合の差がこれ未満なら引き分け",
     "battle.arena": "上から見た平面。x が右、z が手前。角度は +x から +z へ回る向きが正（上から見て時計回り）",
     "battle.hit.damage_scale": "すべてのダメージにかける倍率。バトルの長さの調整用",
+    "battle.health_packs": "回復パック。いつも count 個が場に出ている（穴・壁・機体・ほかのパックから離れたランダムな場所）。large_chance の確率で大（large_heal 回復）、それ以外は小（small_heal 回復）。ダメージを受けている機体が pickup_radius まで近づくと取る。最初の count 個は initial の場所（画面の右上と左下）に出て、大きさだけランダム。取られると respawn_sec 秒後に別の場所へ出る。*_margin と pack_gap は出る場所の空け方（m）、spawn_attempts は場所を探す回数",
     "battle.replan": "考え直す切っ掛け。big_hit_damage は前回考えてから受けたダメージの合計",
     "battle.intent": "方針ごとの目標の距離など（実行役が使う）",
     "damage": "負けた人のダメージ = rank_coef × 順位 + margin_coef × 差（勝った側の残りHPの割合）。整数に丸める。順位は残り体力での順位で 1 が最上位",
@@ -28,7 +29,6 @@
     "arena": {
       "half_size": 15,
       "pits": [ { "x": -4, "z": -7, "r": 2.4 }, { "x": 4, "z": 7, "r": 2.4 } ],
-      "repair_pads": [ { "x": -11.5, "z": 10.5, "r": 2.0 }, { "x": 11.5, "z": -10.5, "r": 2.0 } ],
       "spawns": [ { "x": -11, "z": 0, "facing_deg": 0 }, { "x": 11, "z": 0, "facing_deg": 180 } ]
     },
     "robot": {
@@ -48,10 +48,19 @@
       "avoid_slide": 1.0,
       "near_dist": 4.0
     },
-    "repair": {
-      "total_per_robot": 30,
-      "rate_per_sec": 10,
-      "max_speed": 1.5
+    "health_packs": {
+      "count": 2,
+      "initial": [ { "x": 11.5, "z": -10.5 }, { "x": -11.5, "z": 10.5 } ],
+      "respawn_sec": 8,
+      "large_chance": 0.3,
+      "large_heal": 100,
+      "small_heal": 50,
+      "pickup_radius": 0.8,
+      "wall_margin": 3.0,
+      "pit_margin": 2.0,
+      "robot_margin": 4.0,
+      "pack_gap": 7.0,
+      "spawn_attempts": 40
     },
     "collision": {
       "restitution": 1.3,

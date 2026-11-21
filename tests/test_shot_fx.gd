@@ -104,19 +104,24 @@ func test_frames_carry_shot_id_and_weapon_online() -> void:
 	var setup: Array = []
 	for i: int in 6:
 		setup.append({"name": "P%d" % i, "is_human": false})
-	var s := MatchSession.new(data, 31, setup, DefaultAgents.new())
-	s.finish_draft()
-	s.finish_build()
+	# 配られるパーツは種で決まるので、撃つ武器を持つ機体がいない種もある。弾が飛ぶまで種を変えて試す
+	var s: MatchSession = null
 	var frame: Dictionary = {}
 	var bi: int = -1
-	for k: int in 60 * 60:
-		s.update(DT)
-		if s.phase != "battle":
-			break
-		frame = Protocol.battle_frame(s, 10)
-		for j: int in frame["battles"].size():
-			if not frame["battles"][j]["shots"].is_empty():
-				bi = j
+	for seed_value: int in range(31, 51):
+		s = MatchSession.new(data, seed_value, setup, DefaultAgents.new())
+		s.finish_draft()
+		s.finish_build()
+		for k: int in 60 * 60:
+			s.update(DT)
+			if s.phase != "battle":
+				break
+			frame = Protocol.battle_frame(s, 10)
+			for j: int in frame["battles"].size():
+				if not frame["battles"][j]["shots"].is_empty():
+					bi = j
+					break
+			if bi >= 0:
 				break
 		if bi >= 0:
 			break

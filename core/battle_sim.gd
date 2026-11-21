@@ -14,9 +14,13 @@ const Observation := preload("res://core/observation.gd")
 const REASON_DESTROYED: String = "destroyed"
 const REASON_PIT: String = "pit"
 const REASON_TIME: String = "time"
+## 自爆装置の自爆で相手を道連れにした（引き分け）
+const REASON_SELF_DESTRUCT: String = "self_destruct"
 
 ## 頭脳が壊れた答えを返したときの一言
 const CONFUSED_SAY: String = "えっと…"
+## 自爆装置が動き出したときの一言
+const SELF_DESTRUCT_SAY: String = "道連れだ！"
 
 
 ## 飛んでいる弾
@@ -58,6 +62,14 @@ var _b: Dictionary = {}
 var _think_interval: float = 2.0
 var _think_min_gap: float = 0.5
 var _say_max: int = 40
+## 自爆のダメージを与えている最中（壊された相手の自爆装置には火をつけない）
+var _blasting: bool = false
+## 回復パック。1つは {"id", "x", "z", "big", "heal", "active", "t"}。active でなければ t 秒後に別の場所へ出る
+var packs: Array[Dictionary] = []
+var _pack_rng: Rng
+var _next_pack_id: int = 1
+## 自爆が相手を壊したか（決着のつき方を「自爆で相打ち」にする）
+var _blast_kill: bool = false
 
 
 ## builds・brains・prompts・names はどれも2つ。brains は agent_brain.gd を継承したもの
@@ -75,10 +87,18 @@ func _init(game_data: GameData, builds: Array, brains: Array, prompts: Array, na
 	var spawns: Array = _b["arena"]["spawns"]
 	for i: int in 2:
 		var r := Robot.new()
-		r.setup(data, builds[i], i, str(names[i]), spawns[i], _b["robot"], float(_b["repair"]["total_per_robot"]))
+		r.setup(data, builds[i], i, str(names[i]), spawns[i], _b["robot"])
 		robots.append(r)
 	for i: int in 2:
 		_brains[i].begin(str(prompts[i]), build_summary(data, builds[i]), data.rules)
+	# 回復パックを最初から count 個置く（場所と大小は、試合の種から分けた乱数で決める）
+	_pack_rng = battle_rng.fork("health_packs")
+	# 最初の分は決まった場所（initial）に、足りない分と出直す分はランダムな場所に置く
+	var initial: Array = _b["health_packs"].get("initial", [])
+	for k: int in int(_b["health_packs"]["count"]):
+		var p: Dictionary = {"id": 0, "x": 0.0, "z": 0.0, "big": false, "heal": 0.0, "active": false, "t": 0.0}
+		packs.append(p)
+		_place_pack(p, initial[k] if k < initial.size() else {})
 
 
 ## エージェントに渡す機体の説明
@@ -130,8 +150,12 @@ func step() -> void:
 		_poll(i, t)  # 2. 答えが届いていれば方針を入れ替える
 	var controls: Array[Dictionary] = []
 	for i: int in 2:
+		if robots[i].fuse >= 0.0:
+			# 自爆装置の導火線が燃えている間は、操縦士の方針に関係なく相手へ突っ込む
+			robots[i].intent = "charge"
+			robots[i].want_skill = -1
 		_try_skill(i)  # 3. 実行役（スキルを含む）
-		controls.append(RobotDriver.drive(robots[i], robots[1 - i], _b))
+		controls.append(RobotDriver.drive(robots[i], robots[1 - i], _b, packs))
 	for i: int in 2:
 		_apply_control(robots[i], controls[i])  # 4. 物理
 	_move()
@@ -141,7 +165,13 @@ func step() -> void:
 		_weapons(i)  # 5. 武器の当たり判定とダメージ
 	_update_shots()
 	for i: int in 2:
-		_hazards(i)  # 6. 修理ステーションと穴
+		_hook(i)  # 5.5 ハープーンガンの釣り針（飛ぶ・引き寄せる・戻る）
+	_clamp_walls()
+	for i: int in 2:
+		_hazards(i)  # 6. 回復パックと穴
+	for i: int in 2:
+		_fuse(i)  # 6.5 自爆装置の導火線
+	_update_packs()  # 6.6 取られた回復パックを、時間がたったら別の場所に出す
 	_check_over()  # 7. 決着
 	for e: Dictionary in events:
 		if e["type"] != "shot":
@@ -158,7 +188,10 @@ func snapshot() -> Dictionary:
 	var ss: Array = []
 	for s: Shot in shots:
 		ss.append([s.x, s.z, s.owner])
-	return {"tick": tick, "robots": rs, "shots": ss, "over": over, "result": result}
+	var ps: Array = []
+	for p: Dictionary in packs:
+		ps.append(p.duplicate())
+	return {"tick": tick, "robots": rs, "shots": ss, "packs": ps, "over": over, "result": result}
 
 
 # ---- 1. 2. 考える ----
@@ -172,7 +205,7 @@ func _think(i: int, t: float) -> void:
 	var triggered: bool = not r.trigger.is_empty() and gap >= _think_min_gap - 1e-9
 	if not due and not triggered:
 		return
-	var obs: Dictionary = Observation.build(r, robots[1 - i], t, time_left(), _b)
+	var obs: Dictionary = Observation.build(r, robots[1 - i], t, time_left(), _b, packs)
 	_brains[i].request(obs)
 	r.last_request_t = t
 	r.trigger = ""
@@ -185,6 +218,8 @@ func _poll(i: int, t: float) -> void:
 	var answer: Variant = _brains[i].poll(t)
 	if not (answer is Dictionary) or (answer as Dictionary).is_empty():
 		return
+	if r.fuse >= 0.0 or r.self_destructed:
+		return  # 自爆装置が動き出したら、操縦士の答えはもう使わない
 	var a: Dictionary = answer
 	var intent: Variant = a.get("intent")
 	if not (intent is String) or not RobotDriver.INTENTS.has(intent):
@@ -207,6 +242,9 @@ func _try_skill(i: int) -> void:
 	if r.want_skill < 0 or r.fell or r.stun > 0.0:
 		return
 	var s: Robot.SkillSlot = r.skills[r.want_skill]
+	if s.def.behavior == "self_destruct":
+		r.want_skill = -1  # 自爆装置は自分では使えない（HPが0になると自動で動く）
+		return
 	if not s.is_ready():
 		return  # 使えるようになるまで待つ
 	var en: Robot = robots[1 - i]
@@ -249,6 +287,8 @@ func _apply_control(r: Robot, c: Dictionary) -> void:
 	var cfg: Dictionary = _b["robot"]
 	if r.stun > 0.0:
 		r.stun = maxf(0.0, r.stun - dt)
+		if r.stun <= 0.0:
+			r.flipped = false  # 起き上がった
 		var f: float = minf(1.0, float(cfg["stun_friction"]) * dt)
 		r.vx -= r.vx * f
 		r.vz -= r.vz * f
@@ -260,6 +300,8 @@ func _apply_control(r: Robot, c: Dictionary) -> void:
 	if not c["aim"] and not c["reverse"] and absf(diff) > deg_to_rad(float(cfg["sharp_turn_deg"])):
 		thr *= float(cfg["sharp_turn_throttle"])
 	var sp: float = r.max_speed * r.active_value("booster", "speed_mult", 1.0) * thr
+	if r.fuse >= 0.0:
+		sp *= _fuse_speed(r)
 	if c["reverse"]:
 		sp = -sp * float(cfg["reverse_mult"])
 	var k: float = minf(1.0, float(cfg["accel"]) * dt)
@@ -373,6 +415,7 @@ func _weapons(i: int) -> void:
 					_damage(en.index, dmg, me.x, me.z, def.name, i, true)
 					_knock(en, nx, nz, kb)
 					en.stun = def.get_fixed("stun_sec")
+					en.flipped = true
 					en.trigger = "ひっくり返された"
 					en.add_note("ひっくり返された")
 					events.append({"type": "flip", "robot": en.index, "by": i})
@@ -383,6 +426,20 @@ func _weapons(i: int) -> void:
 					w.cd = def.get_fixed("cooldown_sec")
 					_damage(en.index, dmg * clampf(closing / need, 1.0, 2.0), me.x, me.z, def.name, i, true)
 					_knock(en, nx, nz, kb)
+			"hook":
+				# 釣り針は1本ずつ。前の相手が届く距離にいれば撃つ
+				if me.hook_state == Robot.HOOK_NONE and w.cd <= 0.0 and in_arc and not en.is_down() \
+						and d <= def.get_fixed("range") + en.radius:
+					w.cd = def.get_fixed("cooldown_sec")
+					me.hook_state = Robot.HOOK_FLY
+					me.hook_slot = me.weapons.find(w)
+					me.hook_x = me.x + cos(me.th) * (me.radius + 0.1)
+					me.hook_z = me.z + sin(me.th) * (me.radius + 0.1)
+					var hs: float = def.get_fixed("projectile_speed")
+					me.hook_vx = cos(me.th) * hs
+					me.hook_vz = sin(me.th) * hs
+					me.hook_left = def.get_fixed("range") + en.radius
+					events.append({"type": "hook_fire", "robot": i, "weapon": def.name})
 			"shoot":
 				if w.ammo > 0 and w.cd <= 0.0 and in_arc and d <= def.get_fixed("range"):
 					w.cd = def.get_fixed("cooldown_sec")
@@ -434,7 +491,8 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 		attacker_i: int, discrete: bool) -> float:
 	var v: Robot = robots[victim_i]
 	var a: Robot = robots[attacker_i]
-	if amount <= 0.0 or v.fell:
+	# 導火線が燃えている機体と、自爆し終えた機体はもうダメージを受けない
+	if amount <= 0.0 or v.fell or v.fuse >= 0.0 or v.self_destructed:
 		return 0.0
 	var hit: Dictionary = _b["hit"]
 	var rel: float = absf(angle_difference(v.th, atan2(from_z - v.z, from_x - v.x)))
@@ -447,6 +505,9 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 	var dmg: float = amount * mult
 	v.hp = maxf(0.0, v.hp - dmg)
 	a.dealt += dmg
+	# HPが尽きたら、自爆装置があれば導火線に火がつく（自爆で壊されたときは道連れなのでつかない）
+	if v.hp <= 0.0 and not _blasting:
+		_arm_fuse(victim_i)
 	v.damage_since_request += dmg
 	if v.damage_since_request >= float(_b["replan"]["big_hit_damage"]):
 		v.trigger = "大きく被弾"
@@ -457,7 +518,79 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 	return dmg
 
 
-# ---- 6. 修理ステーションと穴 ----
+# ---- 5.5 ハープーンガン ----
+
+## 釣り針を進める。飛んでいれば相手に当たったかを見る。当たれば相手を自分のところまで引き寄せ、
+## 着いたら自分にぴったり付けて少しのあいだ動けなくする。外れたら巻き戻す
+func _hook(i: int) -> void:
+	var me: Robot = robots[i]
+	if me.hook_state == Robot.HOOK_NONE:
+		return
+	var en: Robot = robots[1 - i]
+	var w: Robot.WeaponSlot = me.weapons[me.hook_slot] if me.hook_slot >= 0 and me.hook_slot < me.weapons.size() else null
+	if w == null or me.fell or me.is_down() or me.self_destructed:
+		_drop_hook(me)
+		return
+	var def: GameData.PartDef = w.def
+	match me.hook_state:
+		Robot.HOOK_FLY:
+			var mv := Vector2(me.hook_vx, me.hook_vz) * dt
+			me.hook_x += mv.x
+			me.hook_z += mv.y
+			me.hook_left -= mv.length()
+			if not en.fell and not en.is_down() \
+					and Vector2(en.x - me.hook_x, en.z - me.hook_z).length() <= en.radius + 0.25:
+				_damage(en.index, w.inst.get_stat("damage"), me.x, me.z, def.name, i, true)
+				me.hook_state = Robot.HOOK_PULL
+				me.hook_x = en.x
+				me.hook_z = en.z
+				en.trigger = "引き寄せられた"
+				en.add_note("釣り針で引き寄せられた")
+				events.append({"type": "hook_hit", "robot": en.index, "by": i, "weapon": def.name})
+			elif me.hook_left <= 0.0:
+				me.hook_state = Robot.HOOK_BACK
+		Robot.HOOK_PULL:
+			if en.fell or en.is_down():
+				_drop_hook(me)
+				return
+			var to_me := Vector2(me.x - en.x, me.z - en.z)
+			var dist: float = to_me.length()
+			var contact: float = me.radius + en.radius + 0.05
+			var pull: float = def.get_fixed("pull_speed") * dt
+			en.vx = 0.0
+			en.vz = 0.0
+			if dist - pull <= contact:
+				# 着いた：引き寄せた向きのまま自分にぴったり付け、少しのあいだ動けなくする
+				var n: Vector2 = -to_me / dist if dist > 1e-6 else Vector2(cos(me.th), sin(me.th))
+				en.x = me.x + n.x * contact
+				en.z = me.z + n.y * contact
+				en.stun = maxf(en.stun, def.get_fixed("hold_sec"))
+				_drop_hook(me)
+				events.append({"type": "hook_end", "robot": en.index, "by": i})
+			else:
+				en.x += to_me.x / dist * pull
+				en.z += to_me.y / dist * pull
+				en.stun = maxf(en.stun, dt * 2.0)  # 引かれている間は自分では動けない
+				me.hook_x = en.x
+				me.hook_z = en.z
+		Robot.HOOK_BACK:
+			var mx: float = me.x + cos(me.th) * (me.radius + 0.1)
+			var mz: float = me.z + sin(me.th) * (me.radius + 0.1)
+			var back := Vector2(mx - me.hook_x, mz - me.hook_z)
+			var spd: float = def.get_fixed("projectile_speed") * dt
+			if back.length() <= spd:
+				_drop_hook(me)
+			else:
+				me.hook_x += back.x / back.length() * spd
+				me.hook_z += back.y / back.length() * spd
+
+
+func _drop_hook(me: Robot) -> void:
+	me.hook_state = Robot.HOOK_NONE
+	me.hook_slot = -1
+
+
+# ---- 6. 回復パックと穴 ----
 
 func _hazards(i: int) -> void:
 	var r: Robot = robots[i]
@@ -465,20 +598,21 @@ func _hazards(i: int) -> void:
 	if r.fell:
 		return
 	var arena: Dictionary = _b["arena"]
-	var rep: Dictionary = _b["repair"]
-	var on_pad: bool = false
-	for pad: Dictionary in arena["repair_pads"]:
-		if Vector2(r.x - float(pad["x"]), r.z - float(pad["z"])).length() < float(pad["r"]):
-			on_pad = true
-	var healing: bool = on_pad and r.repair_left > 0.0 and r.hp < r.max_hp and r.stun <= 0.0 \
-		and r.speed() < float(rep["max_speed"])
-	if healing:
-		var h: float = minf(float(rep["rate_per_sec"]) * dt, minf(r.repair_left, r.max_hp - r.hp))
-		r.hp += h
-		r.repair_left -= h
-		if not r.repairing:
-			events.append({"type": "repair", "robot": i})
-	r.repairing = healing
+	# 回復パック：ダメージを受けている機体が近づくと取る（倒れかけ・自爆の導火線が燃えている機体は取れない）
+	var hp_cfg: Dictionary = _b["health_packs"]
+	if r.hp > 0.0 and r.hp < r.max_hp and r.fuse < 0.0:
+		for p: Dictionary in packs:
+			if not p["active"]:
+				continue
+			if Vector2(r.x - float(p["x"]), r.z - float(p["z"])).length() <= r.radius + float(hp_cfg["pickup_radius"]):
+				var h: float = minf(float(p["heal"]), r.max_hp - r.hp)
+				r.hp += h
+				p["active"] = false
+				p["t"] = float(hp_cfg["respawn_sec"])
+				r.add_note("回復パック%s:+%d" % ["大" if p["big"] else "小", roundi(h)])
+				events.append({"type": "pack", "robot": i, "id": p["id"], "big": p["big"], "heal": h,
+					"x": p["x"], "z": p["z"]})
+				break
 
 	var margin: float = float(_b["pit"]["fall_margin"])
 	for pit: Dictionary in arena["pits"]:
@@ -500,6 +634,128 @@ func _hazards(i: int) -> void:
 	r.enemy_was_near_pit = en_near
 
 
+# ---- 6.5 自爆装置 ----
+
+## 自爆装置の導火線に火をつける。速くなって相手へ突っ込み、ダメージを受けなくなる
+func _arm_fuse(i: int) -> void:
+	var r: Robot = robots[i]
+	var s: Robot.SkillSlot = r.self_destruct_slot()
+	if s == null or r.fell or r.fuse >= 0.0:
+		return
+	if s.charges_left > 0:
+		s.charges_left -= 1
+	r.fuse = maxf(dt, s.def.get_fixed("fuse_sec"))
+	r.fuse_total = r.fuse
+	s.active_t = r.fuse
+	r.stun = 0.0
+	r.flipped = false
+	r.intent = "charge"
+	r.say = SELF_DESTRUCT_SAY
+	events.append({"type": "fuse", "robot": i, "skill": s.def.name})
+
+
+## 導火線を進め、燃え尽きたら（または時間切れなら）自爆する
+func _fuse(i: int) -> void:
+	var r: Robot = robots[i]
+	if r.fuse < 0.0 or r.fell:
+		return
+	r.fuse -= dt
+	if r.fuse <= 0.0 or tick >= time_limit_ticks:
+		_explode(i)
+
+
+## 自爆する。範囲内の相手に大きなダメージと吹き飛ばし。自爆した機体は倒れる
+func _explode(i: int) -> void:
+	var r: Robot = robots[i]
+	var en: Robot = robots[1 - i]
+	var def: GameData.PartDef = null
+	var inst: PartInstance = null
+	for s: Robot.SkillSlot in r.skills:
+		if s.def.behavior == "self_destruct":
+			def = s.def
+			inst = s.inst
+			s.active_t = 0.0
+	r.fuse = -1.0
+	r.self_destructed = true
+	r.vx = 0.0
+	r.vz = 0.0
+	if def == null:
+		return
+	var rng_m: float = def.get_fixed("range")
+	var d := Vector2(en.x - r.x, en.z - r.z)
+	var hit: bool = not en.fell and not en.is_down() and d.length() <= rng_m + r.radius + en.radius
+	var dmg: float = 0.0
+	if hit:
+		_blasting = true
+		dmg = _damage(1 - i, inst.get_stat("blast_damage"), r.x, r.z, def.name, i, true)
+		_blasting = false
+		var n: Vector2 = d.normalized() if d.length() > 0.001 else Vector2(cos(en.th), sin(en.th))
+		_knock(en, n.x, n.y, def.get_fixed("knockback"))
+	if hit and en.is_down():
+		_blast_kill = true
+	events.append({"type": "self_destruct", "robot": i, "hit": hit, "damage": dmg, "range": rng_m})
+
+
+## 導火線が燃えている間の速さの倍率
+func _fuse_speed(r: Robot) -> float:
+	for s: Robot.SkillSlot in r.skills:
+		if s.def.behavior == "self_destruct":
+			return maxf(0.0, s.def.get_fixed("speed_mult", 1.0))
+	return 1.0
+
+
+# ---- 6.6 回復パック ----
+
+## 取られた回復パックの待ち時間を進め、0 になったら別の場所に出す
+func _update_packs() -> void:
+	for p: Dictionary in packs:
+		if p["active"]:
+			continue
+		p["t"] = float(p["t"]) - dt
+		if float(p["t"]) <= 0.0:
+			_place_pack(p)
+			events.append({"type": "pack_spawn", "id": p["id"], "big": p["big"], "x": p["x"], "z": p["z"]})
+
+
+## パックを、穴・壁・機体・ほかのパックから離れたランダムな場所に置き、大か小かを決める。
+## 条件を満たす場所が見つからなければ、試した中で一番離れていた場所にする。fixed（{ x, z }）を渡すとその場所に置く
+func _place_pack(p: Dictionary, fixed: Dictionary = {}) -> void:
+	var cfg: Dictionary = _b["health_packs"]
+	var arena: Dictionary = _b["arena"]
+	var lim: float = float(arena["half_size"]) - float(cfg["wall_margin"])
+	var best := Vector2.ZERO
+	var best_score: float = -INF
+	if not fixed.is_empty():
+		# 決まった場所に置く（場所を探さない）
+		best = Vector2(float(fixed["x"]), float(fixed["z"]))
+		best_score = INF
+	for attempt: int in (0 if not fixed.is_empty() else int(cfg["spawn_attempts"])):
+		var c := Vector2(_pack_rng.randf_range(-lim, lim), _pack_rng.randf_range(-lim, lim))
+		# 一番きつい条件にどれだけ余裕があるか（0 以上なら全部満たす）
+		var score: float = INF
+		for pit: Dictionary in arena["pits"]:
+			score = minf(score, c.distance_to(Vector2(float(pit["x"]), float(pit["z"]))) - float(pit["r"]) - float(cfg["pit_margin"]))
+		for r: Robot in robots:
+			score = minf(score, c.distance_to(Vector2(r.x, r.z)) - float(cfg["robot_margin"]))
+		for o: Dictionary in packs:
+			if o != p and o["active"]:
+				score = minf(score, c.distance_to(Vector2(float(o["x"]), float(o["z"]))) - float(cfg["pack_gap"]))
+		if score > best_score:
+			best_score = score
+			best = c
+		if score >= 0.0:
+			break
+	var big: bool = _pack_rng.chance(float(cfg["large_chance"]))
+	p["id"] = _next_pack_id
+	_next_pack_id += 1
+	p["x"] = best.x
+	p["z"] = best.y
+	p["big"] = big
+	p["heal"] = float(cfg["large_heal"] if big else cfg["small_heal"])
+	p["active"] = true
+	p["t"] = 0.0
+
+
 # ---- 7. 決着 ----
 
 func _check_over() -> void:
@@ -510,9 +766,13 @@ func _check_over() -> void:
 	if a.fell or b.fell:
 		reason = REASON_PIT
 		winner = -1 if a.fell and b.fell else (1 if a.fell else 0)
-	elif a.hp <= 0.0 or b.hp <= 0.0:
-		reason = REASON_DESTROYED
-		winner = -1 if a.hp <= 0.0 and b.hp <= 0.0 else (1 if a.hp <= 0.0 else 0)
+	elif a.fuse >= 0.0 or b.fuse >= 0.0:
+		return  # 自爆装置の導火線が燃えている間は決着しない（自爆の結果を待つ）
+	elif a.is_down() or b.is_down():
+		var both: bool = a.is_down() and b.is_down()
+		# 両方倒れていて、自爆が相手を壊したのなら、自爆による道連れ（引き分け）
+		reason = REASON_SELF_DESTRUCT if both and _blast_kill else REASON_DESTROYED
+		winner = -1 if both else (1 if a.is_down() else 0)
 	elif tick >= time_limit_ticks:
 		reason = REASON_TIME
 		var diff: float = a.hp_ratio() - b.hp_ratio()

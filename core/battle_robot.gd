@@ -6,6 +6,12 @@ const GameData := preload("res://core/game_data.gd")
 const PartInstance := preload("res://core/part_instance.gd")
 const Build := preload("res://core/build.gd")
 
+## ハープーンガンの釣り針の状態：撃っていない／飛んでいる／当たった相手を引き寄せている／外れて戻っている
+const HOOK_NONE: String = ""
+const HOOK_FLY: String = "fly"
+const HOOK_PULL: String = "pull"
+const HOOK_BACK: String = "back"
+
 
 ## 武器1つの状態
 class WeaponSlot:
@@ -50,9 +56,9 @@ var weapons: Array[WeaponSlot] = []
 var skills: Array[SkillSlot] = []
 ## 動けない残り時間（ひっくり返された、EMP）
 var stun: float = 0.0
+## ひっくり返されているか（リフターで。EMP やハープーンガンで止められているだけなら false）
+var flipped: bool = false
 var ram_cd: float = 0.0
-var repair_left: float = 0.0
-var repairing: bool = false
 var fell: bool = false
 ## 回り込みや周回で回る向き（1 か -1）
 var side: float = 1.0
@@ -63,6 +69,18 @@ var say: String = ""
 var want_skill: int = -1
 ## 相手に与えたダメージの合計
 var dealt: float = 0.0
+## 自爆装置：HPが尽きてから自爆するまでの残り秒数（-1 は動いていない）と、その長さ。自爆し終えたか
+var fuse: float = -1.0
+var fuse_total: float = 0.0
+var self_destructed: bool = false
+## ハープーンガンの釣り針。状態は HOOK_* のどれか。位置と速さ、飛べる残りの距離、撃った武器の番号
+var hook_state: String = ""
+var hook_x: float = 0.0
+var hook_z: float = 0.0
+var hook_vx: float = 0.0
+var hook_vz: float = 0.0
+var hook_left: float = 0.0
+var hook_slot: int = -1
 
 # ---- 考えるための記録 ----
 var last_request_t: float = -INF
@@ -76,7 +94,7 @@ var enemy_was_near_pit: bool = false
 
 
 func setup(data: GameData, b: Build, idx: int, robot_name: String, spawn: Dictionary,
-		robot_cfg: Dictionary, repair_total: float) -> void:
+		robot_cfg: Dictionary) -> void:
 	index = idx
 	name = robot_name
 	build = b
@@ -90,7 +108,6 @@ func setup(data: GameData, b: Build, idx: int, robot_name: String, spawn: Dictio
 	turn_rate = deg_to_rad(fdef.get_fixed("turn_rate_deg"))
 	max_speed = float(robot_cfg["base_speed"]) * maxf(0.0, 1.0 - b.frame.get_stat("speed_penalty"))
 	radius = float(robot_cfg["radius"])
-	repair_left = repair_total
 	for w: PartInstance in b.weapons:
 		var ws := WeaponSlot.new()
 		ws.inst = w
@@ -133,6 +150,19 @@ func active_value(behavior: String, stat_name: String, fallback: float) -> float
 	return fallback
 
 
+## まだ動いていない自爆装置（なければ null）
+func self_destruct_slot() -> SkillSlot:
+	for s: SkillSlot in skills:
+		if s.def.behavior == "self_destruct" and s.charges_left != 0:
+			return s
+	return null
+
+
+## 倒れたか（HPが尽き、自爆装置の導火線も燃えていない）
+func is_down() -> bool:
+	return hp <= 0.0 and fuse < 0.0
+
+
 func add_note(text: String) -> void:
 	notes.append(text)
 	while notes.size() > 5:
@@ -149,6 +179,8 @@ func to_dict() -> Dictionary:
 		ss.append({"id": s.def.id, "cd": s.cd, "active": s.active_t, "charges": s.charges_left})
 	return {
 		"x": x, "z": z, "th": th, "vx": vx, "vz": vz, "hp": hp, "max_hp": max_hp,
-		"stun": stun, "fell": fell, "intent": intent, "say": say, "dealt": dealt,
-		"repair_left": repair_left, "weapons": ws, "skills": ss,
+		"stun": stun, "flipped": flipped, "fell": fell, "intent": intent, "say": say, "dealt": dealt,
+		"weapons": ws, "skills": ss,
+		"fuse": fuse, "self_destructed": self_destructed,
+		"hook": [hook_state, hook_x, hook_z, hook_slot],
 	}

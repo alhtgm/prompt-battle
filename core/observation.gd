@@ -5,14 +5,23 @@ const Robot := preload("res://core/battle_robot.gd")
 const RobotDriver := preload("res://core/robot_driver.gd")
 
 
-static func build(me: Robot, en: Robot, t: float, time_left: float, battle: Dictionary) -> Dictionary:
-	var arena: Dictionary = battle["arena"]
+## packs は回復パック（battle_sim.gd の packs）。一番近いものを repair に入れる（場になければ null）
+static func build(me: Robot, en: Robot, t: float, time_left: float, battle: Dictionary, packs: Array = []) -> Dictionary:
 	var back_angle: float = deg_to_rad(float(battle["hit"]["back_angle_deg"]))
 	var ex: float = en.x - me.x
 	var ez: float = en.z - me.z
 	var rel_me: float = angle_difference(me.th, atan2(ez, ex))
 	var rel_en: float = angle_difference(en.th, atan2(-ez, -ex))
-	var pad: Dictionary = RobotDriver.nearest_circle(me.x, me.z, arena["repair_pads"])
+	var pack: Dictionary = RobotDriver.nearest_pack(me.x, me.z, packs)
+	var repair: Variant = null
+	if not pack.is_empty():
+		var px: float = float(pack["x"]) - me.x
+		var pz: float = float(pack["z"]) - me.z
+		repair = {
+			"dist": snappedf(Vector2(px, pz).length(), 0.1),
+			"dir": direction_text(angle_difference(me.th, atan2(pz, px))),
+			"heal": roundi(float(pack["heal"])),
+		}
 
 	var skills: Array = []
 	for s: Robot.SkillSlot in me.skills:
@@ -40,10 +49,7 @@ static func build(me: Robot, en: Robot, t: float, time_left: float, battle: Dict
 			"facing_me": absf(rel_en) < PI - back_angle,
 			"stunned": en.stun > 0.0,
 		},
-		"repair": {
-			"dist": snappedf(Vector2(me.x - float(pad["x"]), me.z - float(pad["z"])).length(), 0.1),
-			"left": roundi(me.repair_left),
-		},
+		"repair": repair,
 		"events": me.notes.duplicate(),
 	}
 

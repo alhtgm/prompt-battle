@@ -63,7 +63,8 @@ func test_every_match_finishes_with_sane_numbers() -> void:
 		check(sim.tick <= sim.time_limit_ticks, "種 %d：制限時間を超えない" % seed_value)
 		var res: Dictionary = sim.result
 		check([-1, 0, 1].has(res.get("winner")), "種 %d：勝者が 0/1/-1" % seed_value)
-		check([BattleSim.REASON_DESTROYED, BattleSim.REASON_PIT, BattleSim.REASON_TIME].has(res.get("reason")),
+		check([BattleSim.REASON_DESTROYED, BattleSim.REASON_PIT, BattleSim.REASON_TIME,
+				BattleSim.REASON_SELF_DESTRUCT].has(res.get("reason")),
 			"種 %d：決着のつき方が決まっている" % seed_value)
 		var m: float = float(res.get("margin", -1.0))
 		check(is_finite(m) and m >= 0.0 and m <= 1.0, "種 %d：差（margin）が 0〜1" % seed_value)
@@ -88,7 +89,8 @@ func test_same_seed_gives_same_match() -> void:
 
 func test_balance_over_many_matches() -> void:
 	var data := H.load_data()
-	var reasons: Dictionary = {BattleSim.REASON_DESTROYED: 0, BattleSim.REASON_PIT: 0, BattleSim.REASON_TIME: 0}
+	var reasons: Dictionary = {BattleSim.REASON_DESTROYED: 0, BattleSim.REASON_PIT: 0, BattleSim.REASON_TIME: 0,
+		BattleSim.REASON_SELF_DESTRUCT: 0}
 	var wins: Array[int] = [0, 0]
 	var draws: int = 0
 	var part_win: Dictionary = {}
@@ -115,9 +117,9 @@ func test_balance_over_many_matches() -> void:
 
 	var n: float = float(BALANCE_MATCHES)
 	var decided: int = wins[0] + wins[1]
-	print("    [偏り] %d試合 破壊 %d / 穴 %d / 時間切れ %d / 引き分け %d / 先の側の勝率 %.1f%% / 平均 %.1f 秒" % [
+	print("    [偏り] %d試合 破壊 %d / 穴 %d / 時間切れ %d / 自爆で相打ち %d / 引き分け %d / 先の側の勝率 %.1f%% / 平均 %.1f 秒" % [
 		BALANCE_MATCHES, reasons[BattleSim.REASON_DESTROYED], reasons[BattleSim.REASON_PIT],
-		reasons[BattleSim.REASON_TIME], draws, 100.0 * wins[0] / maxf(1.0, decided), total_time / n])
+		reasons[BattleSim.REASON_TIME], reasons[BattleSim.REASON_SELF_DESTRUCT], draws, 100.0 * wins[0] / maxf(1.0, decided), total_time / n])
 	var ids_sorted: Array = part_games.keys()
 	ids_sorted.sort()
 	var line: PackedStringArray = PackedStringArray()
@@ -128,7 +130,9 @@ func test_balance_over_many_matches() -> void:
 	# ① 決着の種類：どれも 5% 以上、80% 以下
 	for r: String in reasons:
 		var ratio: float = reasons[r] / n
-		check(ratio >= 0.05 and ratio <= 0.80, "決着「%s」の割合が 5〜80%%（実際 %.1f%%）" % [r, ratio * 100.0])
+		# 自爆で相打ちは、自爆装置を持った機体が負けかけたときだけ起きる珍しい決着なので、下限は見ない
+		var low: float = 0.0 if r == BattleSim.REASON_SELF_DESTRUCT else 0.05
+		check(ratio >= low and ratio <= 0.80, "決着「%s」の割合が %d〜80%%（実際 %.1f%%）" % [r, roundi(low * 100.0), ratio * 100.0])
 	# ② 先に置かれた側の勝率が 40〜60%
 	var side_a: float = wins[0] / maxf(1.0, decided)
 	check(side_a >= 0.40 and side_a <= 0.60, "先の側の勝率が 40〜60%%（実際 %.1f%%）" % (side_a * 100.0))
@@ -198,8 +202,8 @@ func test_driver_outputs_are_finite_for_every_intent() -> void:
 		var builds: Array = [Loot.random_build(data, rng, 1), Loot.random_build(data, rng, 50)]
 		var me := Robot.new()
 		var en := Robot.new()
-		me.setup(data, builds[0], 0, "A", b["arena"]["spawns"][0], b["robot"], 0.0)
-		en.setup(data, builds[1], 1, "B", b["arena"]["spawns"][1], b["robot"], 0.0)
+		me.setup(data, builds[0], 0, "A", b["arena"]["spawns"][0], b["robot"])
+		en.setup(data, builds[1], 1, "B", b["arena"]["spawns"][1], b["robot"])
 		var half: float = float(b["arena"]["half_size"])
 		me.x = rng.randf_range(-half, half)
 		me.z = rng.randf_range(-half, half)

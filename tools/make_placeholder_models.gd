@@ -45,6 +45,9 @@ func _initialize() -> void:
 	_skill_shockwave()
 	_skill_emp()
 	_skill_overclock()
+	_skill_self_destruct()
+	# 後から足したもの（前のモデルの汚れの模様が変わらないよう、最後に作る）
+	_weapon_harpoon()
 	print("書き出したモデル：%d 個（%s）" % [_written, OUT_DIR])
 	quit()
 
@@ -426,3 +429,44 @@ func _skill_overclock() -> void:
 		_add(r, _box(Vector3(0.04, 0.3, 0.38)), Vector3(-0.16 + i * 0.08, 0.3, 0), _mat(STEEL, 0.8, 0.5))
 	_add(r, _box(Vector3(0.4, 0.03, 0.05)), Vector3(0, 0.17, 0.21), _mat(DARK, 0.0, 1.0, Color(1.0, 0.25, 0.15)))
 	_save(r, "skill_overclock")
+
+
+## 自爆装置：赤い筒に黄色と黒の警告の帯、上に赤く光る警告灯
+func _skill_self_destruct() -> void:
+	var r: Node3D = _new("skill_self_destruct")
+	_add(r, _box(Vector3(0.45, 0.1, 0.45)), Vector3(0, 0.05, 0), _mat(DARK, 0.7, 0.6))
+	_add(r, _cyl(0.18, 0.18, 0.45, 10), Vector3(0, 0.32, 0), _mat(RED, 0.5, 0.6))
+	for k: int in 3:
+		var stripe: Color = YELLOW if k % 2 == 0 else Color(0.08, 0.08, 0.08)
+		_add(r, _cyl(0.19, 0.19, 0.05, 10), Vector3(0, 0.16 + k * 0.05, 0), _mat(stripe, 0.3, 0.7))
+	_add(r, _cyl(0.06, 0.06, 0.06, 6), Vector3(0, 0.58, 0), _mat(DARK, 0.8, 0.5))
+	_add(r, _sphere(0.07, 6), Vector3(0, 0.64, 0), _mat(DARK, 0.0, 1.0, Color(1.0, 0.15, 0.1)))
+	_save(r, "skill_self_destruct")
+
+
+## ハープーンガン：機関部と太い銃身、横に鎖を巻いた巻き取り機、銃口に装填された返しつきの釣り針（先が熱で赤い）
+func _weapon_harpoon() -> void:
+	var r: Node3D = _new("weapon_harpoon")
+	var body: StandardMaterial3D = _mat(Color(0.28, 0.3, 0.27), 0.7, 0.6)
+	var steel: StandardMaterial3D = _mat(STEEL, 0.9, 0.45)
+	var hot: StandardMaterial3D = _mat(RED, 0.2, 0.6, Color(1.0, 0.35, 0.1))
+	# 機関部と、上の照準の出っぱり
+	_add(r, _box(Vector3(0.6, 0.34, 0.32)), Vector3(0.3, 0, 0), body)
+	_add(r, _box(Vector3(0.3, 0.1, 0.1)), Vector3(0.35, 0.22, 0), _mat(DARK, 0.7, 0.6))
+	# 太い銃身と、先の補強の輪
+	_add(r, _cyl(0.1, 0.1, 0.95, 8), Vector3(1.05, 0.02, 0), steel, Vector3(0, 0, -90))
+	for x: float in [0.75, 1.15, 1.5]:
+		_add(r, _cyl(0.13, 0.13, 0.06, 8), Vector3(x, 0.02, 0), _mat(DARK, 0.8, 0.5), Vector3(0, 0, -90))
+	# 横の巻き取り機：黄色い枠と、鎖を巻いた太鼓
+	_add(r, _box(Vector3(0.36, 0.3, 0.06)), Vector3(0.45, -0.02, 0.22), _mat(YELLOW, 0.5, 0.6))
+	_add(r, _cyl(0.13, 0.13, 0.16, 10), Vector3(0.45, -0.02, 0.3), _mat(DARK, 0.8, 0.5), Vector3(90, 0, 0))
+	for k: int in 3:
+		_add(r, _torus(0.1, 0.15), Vector3(0.45, -0.02, 0.25 + k * 0.05), steel, Vector3(90, 0, 0))
+	# 装填された釣り針：軸、3本の返し、赤く光る先
+	_add(r, _cyl(0.04, 0.04, 0.3, 6), Vector3(1.65, 0.02, 0), steel, Vector3(0, 0, -90))
+	for k: int in 3:
+		var a: float = TAU * k / 3.0
+		_add(r, _box(Vector3(0.2, 0.04, 0.04)), Vector3(1.78, 0.02 + cos(a) * 0.09, sin(a) * 0.09), steel,
+			Vector3(rad_to_deg(a), 0, 25))
+	_add(r, _cyl(0.07, 0.0, 0.22, 6), Vector3(1.9, 0.02, 0), hot, Vector3(0, 0, -90))
+	_save(r, "weapon_harpoon")

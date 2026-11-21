@@ -10,7 +10,8 @@ const INTENTS: Array[String] = [
 
 
 ## 返す辞書：heading（向きたい角度）, throttle（0〜1）, reverse（後ろ向きに進む）, aim（向きを直接指定した）
-static func drive(me: Robot, en: Robot, battle: Dictionary) -> Dictionary:
+## packs は回復パック（battle_sim.gd の packs）。「回復しに行く」方針のときだけ使う
+static func drive(me: Robot, en: Robot, battle: Dictionary, packs: Array = []) -> Dictionary:
 	var it: Dictionary = battle["intent"]
 	var arena: Dictionary = battle["arena"]
 	var robot_cfg: Dictionary = battle["robot"]
@@ -75,9 +76,14 @@ static func drive(me: Robot, en: Robot, battle: Dictionary) -> Dictionary:
 				tx = sx
 				tz = sz
 		"go_repair":
-			var pad: Dictionary = nearest_circle(me.x, me.z, arena["repair_pads"])
-			tx = float(pad["x"])
-			tz = float(pad["z"])
+			# 一番近い回復パックを取りに行く。場に1つもなければ、相手から離れて待つ
+			var pack: Dictionary = nearest_pack(me.x, me.z, packs)
+			if pack.is_empty():
+				tx = me.x - ux * float(it["retreat_dist"])
+				tz = me.z - uz * float(it["retreat_dist"])
+			else:
+				tx = float(pack["x"])
+				tz = float(pack["z"])
 		"circle":
 			var rad: float = float(it["circle_radius"])
 			var sd: float = float(it["circle_side"]) * me.side
@@ -124,6 +130,20 @@ static func avoid_pits(me: Robot, dir: Vector2, battle: Dictionary) -> Vector2:
 
 
 ## { x, z, r } の配列から一番近いものを返す
+## 一番近い、場に出ている回復パック（なければ空の辞書）
+static func nearest_pack(x: float, z: float, packs: Array) -> Dictionary:
+	var best: Dictionary = {}
+	var bd: float = INF
+	for p: Dictionary in packs:
+		if not p.get("active", false):
+			continue
+		var dd: float = Vector2(x - float(p["x"]), z - float(p["z"])).length()
+		if dd < bd:
+			bd = dd
+			best = p
+	return best
+
+
 static func nearest_circle(x: float, z: float, circles: Array) -> Dictionary:
 	var best: Dictionary = circles[0]
 	var bd: float = INF

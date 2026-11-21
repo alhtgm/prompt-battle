@@ -8,11 +8,15 @@ const Look := preload("res://view/look.gd")
 const PartModels := preload("res://view/arena/part_models.gd")
 const ShieldView := preload("res://view/arena/shield_view.gd")
 const ExplosionView := preload("res://view/arena/explosion_view.gd")
+const SkillFxView := preload("res://view/arena/skill_fx_view.gd")
+const FallBurstView := preload("res://view/arena/fall_burst_view.gd")
+const HookView := preload("res://view/arena/hook_view.gd")
+const HealFxView := preload("res://view/arena/heal_fx_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
 	"grind": Color(0.62, 0.62, 0.6), "strike": Color(0.4, 0.4, 0.42), "lift": Color(0.7, 0.55, 0.12),
-	"ram": Color(0.35, 0.34, 0.33), "shoot": Color(0.18, 0.18, 0.2),
+	"ram": Color(0.35, 0.34, 0.33), "shoot": Color(0.18, 0.18, 0.2), "hook": Color(0.3, 0.32, 0.3),
 }
 const SKILL_COLOR := Color(0.4, 0.95, 1.0)
 ## ひっくり返る・戻る・落ちる速さ（見た目だけの値）
@@ -21,9 +25,24 @@ const FALL_SPEED: float = 6.0
 
 var body: Node3D
 var label: Label3D
-var aura: MeshInstance3D
+## ブースターとオーバークロックの見た目
+var skill_fx: Node3D
 ## バリア（シールドのスキル）の見た目
 var shield: Node3D
+## 穴に落ちたときの光の柱（落ちる前は null）
+var fall_burst: Node3D = null
+var _glow: Color = Color.WHITE
+## ハープーンガンの鎖と釣り針（持っていなければ null）と、武器の先の位置（機体の中の座標。武器の番号順）
+var hook_view: Node3D = null
+## 回復パックを取ったときの緑の演出
+var heal_fx: Node3D
+var weapon_tips: Array[Vector3] = []
+var _radius: float = 0.9
+## 自爆装置の赤い点滅の重ね塗り（点滅していなければ null）と、今点いているか
+var blink_mat: StandardMaterial3D = null
+var blink_on: bool = false
+var _blink_light: OmniLight3D = null
+var _blink_phase: float = 0.0
 ## どのパーツをモデルで描いたか（テストと確認用）。false は仮の箱
 var used_models: Dictionary = {"frame": false, "weapons": [], "skills": []}
 ## 壊されたときの爆発（壊される前は null）
@@ -72,7 +91,8 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 	var n: int = build.weapons.size()
 	for i: int in n:
 		var wdef: GameData.PartDef = data.get_part(build.weapons[i].def_id)
-		var shoot: bool = wdef.behavior == "shoot"
+		# ハープーンガンも、撃つ武器と同じく長い銃身として上に載せる
+		var shoot: bool = wdef.behavior == "shoot" or wdef.behavior == "hook"
 		var side: float = (float(i) - (n - 1) * 0.5) * (width / maxf(1.0, n)) * 0.9
 		var mount: Transform3D
 		if i < weapon_mounts.size():
@@ -82,6 +102,8 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 		else:
 			mount = Transform3D(Basis.IDENTITY, Vector3(length * 0.5 + 0.15, 0.4, side))
 		var size: float = Look.MODEL_SHOOT_SIZE if shoot else Look.MODEL_WEAPON_SIZE
+		# 武器の先（銃口）の位置。ハープーンガンの鎖はここから出る
+		weapon_tips.append(mount * Vector3(size if shoot else 0.6, 0, 0))
 		if _attach_model(wdef.model, mount, size, false, color):
 			used_models["weapons"].append(true)
 			continue
@@ -104,20 +126,23 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 		_box(Vector3(0.1, 0.6, 0.1), mount * Vector3(0, 0.3, 0), Grime.material(Color(0.2, 0.2, 0.2), 0.8, 0.6, 1.0))
 		_box(Vector3(0.16, 0.12, 0.16), mount * Vector3(0, 0.65, 0),
 			Grime.material(SKILL_COLOR, 0.0, 0.5, 1.0, SKILL_COLOR))
-	# スキルが効いている間の光
-	aura = MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = robot_radius * 1.3
-	sphere.height = robot_radius * 2.0
-	aura.mesh = sphere
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(SKILL_COLOR, 0.25)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	aura.material_override = mat
-	aura.position.y = top * 0.5
-	aura.visible = false
-	add_child(aura)
+	# ハープーンガンを持っていれば、鎖と釣り針の見た目を用意する（鎖は世界の中に張るので、機体の向きに引きずられない）
+	for w: Variant in build.weapons:
+		if data.get_part(w.def_id).behavior == "hook" and hook_view == null:
+			hook_view = HookView.new()
+			add_child(hook_view)
+			hook_view.top_level = true
+			hook_view.setup()
+	_radius = robot_radius
+	# 回復パックを取ったとき、機体を緑に光らせる演出
+	heal_fx = HealFxView.new()
+	add_child(heal_fx)
+	heal_fx.setup(body, robot_radius, top)
+	# シールド以外の効果が続くスキル（ブースターの噴射炎、オーバークロックの赤い火花）
+	skill_fx = SkillFxView.new()
+	add_child(skill_fx)
+	skill_fx.setup(length, top, robot_radius)
+	_glow = glow
 	# バリア（シールドのスキル）。機体が裏返っても膜は立ったままにするため、body ではなくここに置く
 	shield = ShieldView.new()
 	add_child(shield)
@@ -140,35 +165,138 @@ func sync(r: Variant, delta: float) -> void:
 	position = Vector3(r.x, 0.0, r.z)
 	rotation.y = -r.th
 	# ひっくり返されている間は前後の軸で回して裏返す
-	var target_roll: float = PI if r.stun > 0.0 else 0.0
+	# ひっくり返されたとき（リフター）だけ裏返す。EMP やハープーンガンで止められているだけなら裏返さない
+	var flipped: bool = bool(r.get("flipped")) if "flipped" in r else r.stun > 0.0
+	var target_roll: float = PI if flipped and r.stun > 0.0 else 0.0
 	_roll = move_toward(_roll, target_roll, FLIP_SPEED * delta)
 	body.rotation.x = _roll
 	# 穴に落ちたら沈んで小さくなる
 	if r.fell:
+		if fall_burst == null:
+			# 穴から光の柱が吹き上がる演出。機体は沈んで縮むので、演出は落ちた場所に独立して置く
+			fall_burst = FallBurstView.new()
+			add_child(fall_burst)
+			fall_burst.top_level = true
+			fall_burst.global_position = get_parent_node_3d().to_global(Vector3(r.x, 0.0, r.z)) \
+				if get_parent_node_3d() != null else Vector3(r.x, 0.0, r.z)
+			fall_burst.setup(_glow)
+		fall_burst.update(delta)
 		_fell_time += delta
 		position.y = -FALL_SPEED * _fell_time * _fell_time
 		scale = Vector3.ONE * maxf(0.05, 1.0 - _fell_time * 0.8)
-	# シールドはバリアで、ほかのスキルは薄い光で見せる
-	var active: bool = false
+	# シールドはバリア、ブースターとオーバークロックはそれぞれの演出で見せる
+	var booster: bool = false
+	var overclock: bool = false
 	var shield_left: float = 0.0
 	for s: Variant in r.skills:
 		if s.active_t <= 0.0:
 			continue
-		if s.def.behavior == "shield":
-			shield_left = maxf(shield_left, s.active_t / maxf(0.001, s.def.get_fixed("duration_sec", 1.0)))
-		else:
-			active = true
-	# HPが尽きたら爆発して部品が散らばる（穴に落ちたときは爆発しない）
-	var destroyed: bool = r.hp <= 0.0 and not r.fell
+		match s.def.behavior:
+			"shield":
+				shield_left = maxf(shield_left, s.active_t / maxf(0.001, s.def.get_fixed("duration_sec", 1.0)))
+			"booster":
+				booster = true
+			"overclock":
+				overclock = true
+	# 自爆装置の導火線が燃えている間は、赤く点滅し、自爆が近づくほど速くなる
+	var fuse: float = float(r.get("fuse")) if "fuse" in r else -1.0
+	var fuse_total: float = float(r.get("fuse_total")) if "fuse_total" in r else 0.0
+	_update_fuse_blink(fuse, fuse_total, delta)
+	# HPが尽きたら爆発して部品が散らばる（穴に落ちたときは爆発しない。導火線が燃えている間はまだ）
+	var destroyed: bool = r.hp <= 0.0 and not r.fell and fuse < 0.0
 	if destroyed and explosion == null:
+		_clear_blink()
 		explosion = ExplosionView.new()
 		add_child(explosion)
-		explosion.start(body, Vector3(0, _top * 0.5, 0), _size)
+		var self_destructed: bool = bool(r.get("self_destructed")) if "self_destructed" in r else false
+		if self_destructed:
+			# 自爆：ふつうの爆発より大きく、衝撃の輪は自爆の届く範囲まで広がる
+			explosion.start(body, Vector3(0, _top * 0.5, 0), _size * Look.SELF_DESTRUCT_SIZE, _blast_range(r))
+		else:
+			explosion.start(body, Vector3(0, _top * 0.5, 0), _size)
 	if explosion != null:
 		explosion.update(delta)
-	aura.visible = active and not r.fell and not destroyed
+	var alive: bool = not r.fell and not destroyed
+	skill_fx.update(booster and alive, overclock and alive, delta)
 	shield.update(shield_left > 0.0 and not r.fell and not destroyed, shield_left, delta)
+	# 回復の緑の演出（自爆装置の点滅中や爆発したあとは、体を緑に塗らない）
+	heal_fx.update(delta, blink_mat == null and explosion == null)
+	# ハープーンガンの鎖と釣り針：銃口から、釣り針（引き寄せている間は相手）まで
+	if hook_view != null:
+		var hs: String = str(r.get("hook_state")) if "hook_state" in r else ""
+		if hs != "" and is_inside_tree():
+			var slot: int = int(r.get("hook_slot"))
+			var tip: Vector3 = weapon_tips[slot] if slot >= 0 and slot < weapon_tips.size() \
+				else Vector3(_size * 0.5, _top * 0.6, 0)
+			var muzzle: Vector3 = body.to_global(tip)
+			var y: float = Look.HOOK_TARGET_HEIGHT if hs == "pull" else muzzle.y
+			var parent: Node3D = get_parent_node_3d()
+			var at := Vector3(float(r.get("hook_x")), y, float(r.get("hook_z")))
+			hook_view.update(hs, muzzle, parent.to_global(at) if parent != null else at, _radius, delta)
+		else:
+			hook_view.update("", Vector3.ZERO, Vector3.ZERO, _radius, delta)
 	label.text = r.name if r.say.is_empty() else "%s「%s」" % [r.name, r.say]
+
+
+## 導火線が燃えている間の赤い点滅。最初はゆっくり、自爆の直前はとても速く点滅する
+func _update_fuse_blink(fuse: float, fuse_total: float, delta: float) -> void:
+	if fuse < 0.0:
+		if blink_mat != null:
+			_clear_blink()
+		return
+	if blink_mat == null:
+		# 機体のすべての部品に、赤く光る重ね塗りをかける
+		blink_mat = StandardMaterial3D.new()
+		blink_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		blink_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		blink_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		blink_mat.albedo_color = Color(Look.SELF_DESTRUCT_COLOR, 0.0)
+		_set_overlay(body, blink_mat)
+		_blink_light = OmniLight3D.new()
+		_blink_light.light_color = Look.SELF_DESTRUCT_COLOR
+		_blink_light.omni_range = _size * 2.5
+		_blink_light.position.y = _top * 0.7
+		add_child(_blink_light)
+		_blink_phase = 0.0
+	var p: float = clampf(1.0 - fuse / maxf(0.001, fuse_total), 0.0, 1.0)
+	var hz: float = lerpf(Look.SELF_DESTRUCT_BLINK_START_HZ, Look.SELF_DESTRUCT_BLINK_END_HZ, p * p)
+	_blink_phase += hz * delta
+	blink_on = fmod(_blink_phase, 1.0) < 0.5
+	# 点いている間は強く赤く、自爆が近いほど消えている間も赤みが残る
+	var a: float = (0.85 if blink_on else 0.12 * p)
+	blink_mat.albedo_color = Color(Look.SELF_DESTRUCT_COLOR, a)
+	_blink_light.light_energy = (Look.SELF_DESTRUCT_LIGHT * (0.6 + 0.6 * p)) if blink_on else 0.0
+
+
+func _clear_blink() -> void:
+	if blink_mat != null:
+		_set_overlay(body, null)
+		blink_mat = null
+	if _blink_light != null:
+		_blink_light.queue_free()
+		_blink_light = null
+	blink_on = false
+
+
+func _set_overlay(n: Node, mat: Material) -> void:
+	for c: Node in n.get_children():
+		if c is MeshInstance3D and c.get_meta("debris", true):
+			(c as MeshInstance3D).material_overlay = mat
+		_set_overlay(c, mat)
+
+
+## 自爆が届く範囲（m）。わからなければ機体の大きさの3倍
+func _blast_range(r: Variant) -> float:
+	for s: Variant in r.skills:
+		if s.def.behavior == "self_destruct":
+			return s.def.get_fixed("range") + _size
+	return _size * 3.0
+
+
+## 回復パックを取った（arena_view が出来事から呼ぶ）。機体を緑に光らせる。big は大のパック
+func on_heal(big: bool) -> void:
+	heal_fx.play(big)
+	heal_fx.update(0.0, blink_mat == null and explosion == null)  # その場ですぐ光らせる
 
 
 ## 被弾した（arena_view が出来事から呼ぶ）。バリアを張っていれば、攻撃が来た向きに波紋を出す

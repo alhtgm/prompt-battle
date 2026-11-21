@@ -22,6 +22,8 @@ class ShotView:
 
 var robots: Array[Robot] = []
 var shots: Array[ShotView] = []
+## 回復パック（サーバーの試合の packs の写し）
+var packs: Array = []
 var log: Array[Dictionary] = []
 var tick: int = 0
 var tick_rate: int = 60
@@ -40,8 +42,7 @@ func setup(data: GameData, builds: Array, names: Array) -> void:
 	time_limit_ticks = roundi(float(b["time_limit_sec"]) * tick_rate)
 	for i: int in 2:
 		var r := Robot.new()
-		r.setup(data, builds[i], i, str(names[i]), b["arena"]["spawns"][i], b["robot"],
-			float(b["repair"]["total_per_robot"]))
+		r.setup(data, builds[i], i, str(names[i]), b["arena"]["spawns"][i], b["robot"])
 		robots.append(r)
 		_targets.append(Vector3(r.x, r.z, r.th))
 
@@ -67,11 +68,19 @@ func apply_frame(f: Dictionary) -> void:
 		var r: Robot = robots[i]
 		r.hp = float(d["hp"])
 		r.stun = float(d["stun"])
+		r.flipped = bool(d.get("flipped", false))
 		r.fell = bool(d["fell"])
 		r.intent = str(d["intent"])
 		r.say = str(d["say"])
-		r.repairing = bool(d["repairing"])
-		r.repair_left = float(d["repair_left"])
+		r.fuse = float(d.get("fuse", -1.0))
+		r.fuse_total = float(d.get("fuse_total", 0.0))
+		r.self_destructed = bool(d.get("self_destructed", false))
+		var hk: Array = d.get("hook", ["", 0.0, 0.0, -1])
+		if hk.size() >= 4:
+			r.hook_state = str(hk[0])
+			r.hook_x = float(hk[1])
+			r.hook_z = float(hk[2])
+			r.hook_slot = int(hk[3])
 		var sk: Array = d.get("skills", [])
 		for k: int in mini(sk.size(), r.skills.size()):
 			r.skills[k].active_t = float(sk[k][0])
@@ -86,6 +95,7 @@ func apply_frame(f: Dictionary) -> void:
 			r.z = _targets[i].y
 			r.th = _targets[i].z
 	_got_frame = true
+	packs = f.get("packs", packs)
 	var sh: Array = f.get("shots", [])
 	while shots.size() < sh.size():
 		shots.append(ShotView.new())

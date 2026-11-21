@@ -32,11 +32,9 @@ const LAMP_ANGLE_DEG: float = 70.0
 ## 斜めから弱く当てる冷たい光（影なし）
 const FILL_COLOR := Color(0.55, 0.65, 0.85)
 const FILL_ENERGY: float = 0.55
-## 穴の縁を照らす赤い光、修理ステーションの緑の光
+## 穴の縁を照らす赤い光
 const PIT_LIGHT := Color(1.0, 0.18, 0.08)
 const PIT_LIGHT_ENERGY: float = 3.0
-const PAD_LIGHT := Color(0.25, 1.0, 0.45)
-const PAD_LIGHT_ENERGY: float = 1.2
 ## 壁の外に立てる松明（view/arena/torch.gd）。置く場所は四隅と各辺の真ん中（-1〜1 の割合 × 壁までの距離）
 const TORCH_SPOTS: Array[Vector2] = [
 	Vector2(-1, -1), Vector2(0, -1), Vector2(1, -1), Vector2(-1, 0),
@@ -62,7 +60,6 @@ const FLOOR_TILE: float = 5.0
 const FLOOR_COLOR := Color(0.36, 0.35, 0.33)
 const WALL_COLOR := Color(0.42, 0.28, 0.18)
 const PIT_RIM_COLOR := Color(0.75, 0.6, 0.12)
-const PAD_COLOR := Color(0.15, 0.55, 0.25)
 ## 陣営の色（暗い中でも見分けられるよう、くすんだ地の色と光る目印の色）
 const SIDE_BODY: Array[Color] = [Color(0.38, 0.52, 0.66), Color(0.72, 0.45, 0.26)]
 const SIDE_GLOW: Array[Color] = [Color(0.35, 0.75, 1.0), Color(1.0, 0.55, 0.15)]
@@ -99,6 +96,67 @@ const SHIELD_LOW_FRAC: float = 0.3
 ## 膜の明るさと、機体や床を照らす光の強さ
 const SHIELD_INTENSITY: float = 1.0
 const SHIELD_LIGHT_ENERGY: float = 1.2
+
+# ---- シールド以外のスキルの見た目（view/arena/skill_fx_view.gd） ----
+const BOOSTER_FLAME := Color(1.0, 0.6, 0.25)
+const BOOSTER_TRAIL := Color(0.6, 0.8, 1.0)
+## 噴射炎の長さ（m）
+const BOOSTER_FLAME_LENGTH: float = 1.1
+const OVERCLOCK_COLOR := Color(1.0, 0.2, 0.15)
+
+# ---- 穴に落ちたときの演出（view/arena/fall_burst_view.gd）。光の柱が穴から空へ吹き上がる ----
+## 光が吹き上がるまでの間（機体が沈んでいく時間）と、全体が消えるまでの秒数
+const FALL_BURST_DELAY: float = 0.35
+const FALL_BURST_SEC: float = 1.4
+## 光の柱の高さと太さ（m）、放射状に飛ぶ光の筋の数と長さ（m）
+const FALL_BURST_HEIGHT: float = 18.0
+const FALL_BURST_WIDTH: float = 1.3
+const FALL_BURST_STREAKS: int = 14
+const FALL_BURST_STREAK_LEN: float = 6.0
+## 閃光の強さと、画面を揺らす強さ
+const FALL_BURST_FLASH: float = 12.0
+const FALL_BURST_SHAKE: float = 1.1
+
+# ---- 回復パック（view/arena/health_pack_view.gd） ----
+## 箱の水色、十字の白、十字の縁の赤
+const PACK_COLOR := Color(0.45, 0.85, 1.0)
+const PACK_CROSS := Color(1.0, 1.0, 1.0)
+const PACK_CROSS_EDGE := Color(0.85, 0.12, 0.1)
+## 箱の大きさ（m。小と大）、浮かぶ高さ（m）、水色の光の強さ
+const PACK_SIZE_SMALL: float = 0.5
+const PACK_SIZE_BIG: float = 0.75
+const PACK_HOVER: float = 0.9
+const PACK_LIGHT: float = 1.6
+## 回復した機体の演出（view/arena/heal_fx_view.gd）：緑の色、続く秒数（大は1.3倍）、周りを照らす緑の光の強さ
+const HEAL_COLOR := Color(0.25, 1.0, 0.35)
+const HEAL_FX_SEC: float = 1.3
+const HEAL_LIGHT: float = 3.0
+
+# ---- ハープーンガン（view/arena/hook_view.gd）と効果音（view/sfx.gd） ----
+const HOOK_CHAIN_COLOR := Color(0.42, 0.41, 0.4)
+const HOOK_HEAD_COLOR := Color(0.5, 0.48, 0.45)
+## 釣り針の先（熱で赤く光る）
+const HOOK_HOT_COLOR := Color(1.0, 0.35, 0.1)
+## 鎖の輪の大きさ（m）と、並べる輪の数の上限、飛んでいる間のたわみ（m）、巻き取り機の太鼓の半径（m）
+const HOOK_LINK_SIZE: float = 0.16
+const HOOK_MAX_LINKS: int = 110
+const HOOK_SAG: float = 0.35
+const HOOK_REEL_RADIUS: float = 0.14
+## 引き寄せている相手の、釣り針が刺さる高さ（m）
+const HOOK_TARGET_HEIGHT: float = 0.7
+## 効果音の大きさ（0〜1）
+const SFX_VOLUME: float = 0.8
+
+# ---- 自爆装置（view/arena/robot_view.gd の点滅と、explosion_view.gd の大きな爆発） ----
+const SELF_DESTRUCT_COLOR := Color(1.0, 0.12, 0.08)
+## 点滅の速さ（1秒に何回）：導火線に火がついた直後と、自爆の直前
+const SELF_DESTRUCT_BLINK_START_HZ: float = 2.0
+const SELF_DESTRUCT_BLINK_END_HZ: float = 16.0
+## 点滅に合わせて周りを照らす赤い光の強さ
+const SELF_DESTRUCT_LIGHT: float = 3.0
+## 自爆の爆発の大きさ（ふつうの爆発の何倍か）と、画面を揺らす強さ
+const SELF_DESTRUCT_SIZE: float = 1.8
+const SELF_DESTRUCT_SHAKE: float = 1.6
 
 # ---- 機体が壊されたときの爆発（view/arena/explosion_view.gd） ----
 const EXPLOSION_FIRE := Color(1.0, 0.55, 0.15)

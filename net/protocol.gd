@@ -2,8 +2,8 @@
 # 状態の組み立ては「見る人」ごとに行い、見せてはいけないもの（生き残っている間の相手のプロンプト、ほかの人の手持ち）は入れない。
 extends RefCounted
 
-## 弾の番号・速度・武器の種類を送るようにしたので 3（違う版どうしはつながらない）
-const VERSION: int = 3
+## 回復パック・自爆装置・ハープーンを送るようにし、修理ステーションの値を送らなくしたので 4（違う版どうしはつながらない）
+const VERSION: int = 4
 
 # クライアント → サーバー
 const HELLO: String = "hello"
@@ -115,14 +115,19 @@ static func battle_frame(s: RefCounted, max_log: int) -> Dictionary:
 				ammo.append(w.ammo)
 			robots.append({
 				"x": r.x, "z": r.z, "th": r.th, "hp": r.hp, "stun": r.stun, "fell": r.fell, "intent": r.intent,
-				"say": r.say, "repairing": r.repairing, "repair_left": r.repair_left, "skills": skills, "ammo": ammo,
+				"say": r.say, "skills": skills, "ammo": ammo,
+				"fuse": r.fuse, "fuse_total": r.fuse_total, "self_destructed": r.self_destructed,
+				"hook": [r.hook_state, r.hook_x, r.hook_z, r.hook_slot], "flipped": r.flipped,
 			})
 		var shots: Array = []
 		for sh: Variant in sim.shots:
 			shots.append([sh.x, sh.z, sh.vx, sh.vz, sh.id, sh.weapon, sh.owner])
 		var first: int = maxi(0, sim.log.size() - max_log)
+		var packs: Array = []
+		for p: Variant in sim.packs:
+			packs.append(p.duplicate())
 		battles.append({
-			"tick": sim.tick, "over": sim.over, "result": sim.result, "robots": robots, "shots": shots,
+			"tick": sim.tick, "over": sim.over, "result": sim.result, "robots": robots, "shots": shots, "packs": packs,
 			"log_from": first, "log": sim.log.slice(first),
 		})
 	return {"round_no": s.round_no, "battles": battles}

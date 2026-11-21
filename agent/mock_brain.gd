@@ -24,7 +24,7 @@ const SAYINGS: Dictionary = {
 	"keep_distance": ["距離をとるっす", "近寄らせないっす"],
 	"retreat": ["いったん下がるっす！", "逃げるっす～"],
 	"push_to_pit": ["穴に寄せるっす！", "落としてやるっす"],
-	"go_repair": ["修理してくるっす", "ちょっと直すっす"],
+	"go_repair": ["回復してくるっす", "パック取ってくるっす"],
 	"circle": ["ぐるぐる回るっす", "様子見っす"],
 	"hold": ["……待つっす", "ここで待つっす"],
 }
@@ -81,7 +81,8 @@ func poll(now: float) -> Dictionary:
 func _decide(obs: Dictionary) -> Dictionary:
 	var me: Dictionary = obs["me"]
 	var en: Dictionary = obs["enemy"]
-	var repair: Dictionary = obs["repair"]
+	# 一番近い回復パック（場になければ null）
+	var repair: Variant = obs.get("repair")
 	var hp: float = float(me["hp"])
 	var dist: float = float(en["dist"])
 	var ammo: Variant = me.get("ammo")
@@ -90,7 +91,7 @@ func _decide(obs: Dictionary) -> Dictionary:
 	var intent: String = "charge"
 	var low_hp: bool = hp < float(_cfg["repair_hp_any_style"]) \
 		or (_style["cautious"] and hp < float(_cfg["repair_hp"]))
-	if low_hp and float(repair["left"]) > 0.0 and dist > float(_cfg["repair_enemy_dist"]):
+	if low_hp and repair != null and dist > float(_cfg["repair_enemy_dist"]):
 		intent = "go_repair"
 	elif _style["pit"] and en["near_pit"]:
 		intent = "push_to_pit"
