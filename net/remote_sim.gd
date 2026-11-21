@@ -15,8 +15,9 @@ class ShotView:
 	var z: float = 0.0
 	var vx: float = 0.0
 	var vz: float = 0.0
+	var owner: int = 0
 	var id: int = 0
-	var def_id: String = ""
+	var weapon: String = ""
 
 
 var robots: Array[Robot] = []
@@ -100,13 +101,15 @@ func apply_frame(f: Dictionary) -> void:
 		shots.append(ShotView.new())
 	shots.resize(sh.size())
 	for k: int in sh.size():
-		shots[k].x = float(sh[k][0])
-		shots[k].z = float(sh[k][1])
-		if sh[k].size() >= 6:
-			shots[k].vx = float(sh[k][2])
-			shots[k].vz = float(sh[k][3])
-			shots[k].id = int(sh[k][4])
-			shots[k].def_id = str(sh[k][5])
+		var e: Array = sh[k]
+		var v: ShotView = shots[k]
+		v.x = float(e[0])
+		v.z = float(e[1])
+		v.vx = float(e[2]) if e.size() > 2 else 0.0
+		v.vz = float(e[3]) if e.size() > 3 else 0.0
+		v.id = int(e[4]) if e.size() > 4 else 0
+		v.weapon = str(e[5]) if e.size() > 5 else ""
+		v.owner = int(e[6]) if e.size() > 6 else 0
 	# 実況：まだ持っていない番号のものだけ足す
 	var first: int = int(f.get("log_from", 0))
 	var entries: Array = f.get("log", [])
@@ -119,6 +122,10 @@ func apply_frame(f: Dictionary) -> void:
 func advance(delta: float) -> void:
 	_since_frame += delta
 	var w: float = minf(1.0, FOLLOW * delta)
+	# 弾は届く間隔（毎秒20回ほど）では飛び飛びになるので、速度で先へ進めておく（次の動きが届けば置き直す）
+	for sh: ShotView in shots:
+		sh.x += sh.vx * delta
+		sh.z += sh.vz * delta
 	for i: int in robots.size():
 		var r: Robot = robots[i]
 		r.x = lerpf(r.x, _targets[i].x, w)

@@ -1,5 +1,6 @@
 # バトル中の画面。3Dのアリーナで自分の試合を映し、上に両機体のHP・今の方針・一言、下に実況とほかの試合の様子を重ねる。
 # 自分が脱落していれば、残っている試合を観戦する。状態は読むだけで、操作は MatchSession のメソッドだけを通す。
+# 開発用：一時停止のボタンと、カメラの操作（右ドラッグで回す、中ドラッグか WASD で動かす、ホイールで近づく、1/2 で機体を追う、R で戻す）。
 extends Control
 
 const UiText := preload("res://view/ui_text.gd")
@@ -29,6 +30,9 @@ var others_label: Label
 ## 機体の頭上に重ねる名前と一言
 var bubbles: Array[Label] = []
 ## 開発用：本番の頭脳の問い合わせの記録（F2 で開け閉め。F3 で渡している指示文に切り替え。F4 で見る機体を切り替え）
+## 開発用のカメラの早見（開発用の実行のときだけ出す）と、ドラッグ中のマウスのボタン（なければ 0）
+var dev_camera_hint: Label = null
+var _drag_button: int = 0
 var llm_panel: Control
 var llm_text: RichTextLabel
 var _llm_show_system: bool = false
@@ -79,12 +83,17 @@ func build_ui() -> void:
 	var specs: Array = [["1倍", set_speed.bind(1.0)], ["4倍", set_speed.bind(4.0)], ["最後まで飛ばす", skip]]
 	if main.agents.llm_server != null:
 		specs.append(["LLMの記録（F2）", toggle_llm_panel])
+	if OS.is_debug_build():
+		specs.append(["一時停止（Space）", main.toggle_dev_pause])
 	for spec: Array in specs:
 		var b := Button.new()
 		b.text = spec[0]
 		b.custom_minimum_size = Vector2(110, 36)
 		b.pressed.connect(spec[1])
 		row.add_child(b)
+	if OS.is_debug_build():
+		dev_camera_hint = _label(top, "", 13, COL_DIM)
+		dev_camera_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 左上・右上：両機体
 	for i: int in 2:
@@ -148,6 +157,9 @@ func toggle_llm_panel() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _dev_camera_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	var k := event as InputEventKey
 	if k == null or not k.pressed or k.echo or main.agents.llm_server == null:
 		return
@@ -237,10 +249,84 @@ func _fill_prompts() -> void:
 			side_prompts[i].text = "プロンプト：%s" % (text if not text.is_empty() else "（なし）")
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if main != null and main.session != null and main.session.phase == "battle":
+		arena.paused = main.dev_paused
+		_dev_camera_keys(delta)
 		refresh()
 		_place_bubbles()
+
+
+# ---- 開発用のカメラ ----
+
+const CAMERA_MODE_LABELS: Array[String] = ["追従", "自由", "機体を追う"]
+
+
+## WASD は押している間ずっと動かす（文字の欄に入力しているときは動かさない）
+func _dev_camera_keys(delta: float) -> void:
+	if not OS.is_debug_build():
+		return
+	var focus: Control = get_viewport().gui_get_focus_owner()
+	if focus is TextEdit or focus is LineEdit:
+		return
+	var right: float = float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A))
+	var forward: float = float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S))
+	if right != 0.0 or forward != 0.0:
+		if arena.camera_mode == ArenaView.CameraMode.FOLLOW:
+			arena.dev_free_camera()
+		var speed: float = Look.DEV_CAM_KEY_PAN * arena.cam_dist * delta
+		arena.dev_pan(right * speed, forward * speed)
+	if dev_camera_hint != null:
+		var mode: String = CAMERA_MODE_LABELS[arena.camera_mode]
+		if arena.camera_mode == ArenaView.CameraMode.TRACK and watched_battle != null:
+			mode += "（%s）" % watched_battle.sim.robots[arena.track_index].name
+		dev_camera_hint.text = "[開発] カメラ：%s　右ドラッグ 回す／中ドラッグ・WASD 動かす／ホイール 近づく\n1・2 機体を追う／R 戻す%s" % [
+			mode, "　Space 一時停止／. 1コマ送り" if main.can_dev_pause() else ""]
+
+
+## マウスとキーのカメラ操作。扱ったら true
+func _dev_camera_input(event: InputEvent) -> bool:
+	if not OS.is_debug_build() or arena == null:
+		return false
+	var mb := event as InputEventMouseButton
+	if mb != null:
+		match mb.button_index:
+			MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE:
+				_drag_button = mb.button_index if mb.pressed else 0
+				return true
+			MOUSE_BUTTON_WHEEL_UP:
+				if mb.pressed:
+					arena.dev_zoom(Look.DEV_CAM_ZOOM_STEP)
+				return true
+			MOUSE_BUTTON_WHEEL_DOWN:
+				if mb.pressed:
+					arena.dev_zoom(1.0 / Look.DEV_CAM_ZOOM_STEP)
+				return true
+		return false
+	var mm := event as InputEventMouseMotion
+	if mm != null and _drag_button != 0:
+		if _drag_button == MOUSE_BUTTON_RIGHT:
+			arena.dev_orbit(mm.relative.x * Look.DEV_CAM_ORBIT_PER_PX, mm.relative.y * Look.DEV_CAM_ORBIT_PER_PX)
+		else:
+			var k: float = Look.DEV_CAM_PAN_PER_PX * arena.cam_dist
+			if arena.camera_mode == ArenaView.CameraMode.FOLLOW:
+				arena.dev_free_camera()
+			# 床をつかんで引っぱる向き：右へ動かすとカメラは左へ、下へ動かすとカメラは奥へ
+			arena.dev_pan(-mm.relative.x * k, mm.relative.y * k)
+		return true
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo:
+		match key.keycode:
+			KEY_1:
+				arena.dev_track(0)
+				return true
+			KEY_2:
+				arena.dev_track(1)
+				return true
+			KEY_R:
+				arena.dev_reset_camera()
+				return true
+	return false
 
 
 ## 頭上の文字を、3Dの機体の位置に合わせて置く（低い解像度で描いているので、その倍率を掛ける）
@@ -296,8 +382,9 @@ func refresh() -> void:
 	var sim: Variant = watched_battle.sim
 	var names: Array = [sim.robots[0].name, sim.robots[1].name]
 	var spectating: String = "（観戦中）" if not s.get_player(main.human_id).alive else ""
-	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s倍）\n%s" % [
-		s.round_no, spectating, sim.now(), sim.time_left(), main.battle_speed, main.agents.brain_status_text()]
+	var speed_text: String = "一時停止中" if main.dev_paused else "%s倍" % main.battle_speed
+	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s）\n%s" % [
+		s.round_no, spectating, sim.now(), sim.time_left(), speed_text, main.agents.brain_status_text()]
 	if sim.over:
 		var w: int = int(sim.result["winner"])
 		var all_over: bool = float(s.get("battle_end_left")) >= 0.0 if "battle_end_left" in s else false
