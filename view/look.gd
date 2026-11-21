@@ -37,6 +37,26 @@ const PIT_LIGHT := Color(1.0, 0.18, 0.08)
 const PIT_LIGHT_ENERGY: float = 3.0
 const PAD_LIGHT := Color(0.25, 1.0, 0.45)
 const PAD_LIGHT_ENERGY: float = 1.2
+## 壁の外に立てる松明（view/arena/torch.gd）。置く場所は四隅と各辺の真ん中（-1〜1 の割合 × 壁までの距離）
+const TORCH_SPOTS: Array[Vector2] = [
+	Vector2(-1, -1), Vector2(0, -1), Vector2(1, -1), Vector2(-1, 0),
+	Vector2(1, 0), Vector2(-1, 1), Vector2(0, 1), Vector2(1, 1),
+]
+## 壁の外側へどれだけ離すか、柱の高さ
+const TORCH_OUTSET: float = 0.9
+const TORCH_HEIGHT: float = 2.0
+## 火の色と光の色・明るさ・届く距離・減り方（明るすぎないよう、真ん中の電球より弱く、壁ぎわ数メートルだけ照らす）
+const TORCH_FLAME_COLOR := Color(1.0, 0.6, 0.2)
+const TORCH_LIGHT_COLOR := Color(1.0, 0.55, 0.22)
+const TORCH_ENERGY: float = 6.0
+const TORCH_RANGE: float = 10.0
+const TORCH_ATTENUATION: float = 1.2
+## 明るさの揺れの大きさ（0.2 なら ±20%）と、火の粉の数
+const TORCH_FLICKER: float = 0.2
+const TORCH_EMBERS: int = 6
+## 床を何メートル四方のタイルに分けるか（1つの物を照らせる光は8つまでなので、
+## 床を分けて、どのタイルにも近くの光だけが当たるようにする。Compatibility の制限）
+const FLOOR_TILE: float = 5.0
 
 # ---- 質感 ----
 const FLOOR_COLOR := Color(0.36, 0.35, 0.33)
@@ -263,3 +283,16 @@ const PODIUM_STAGE: Dictionary = {
 }
 ## 順位が分からない（通信対戦で相手の機体が届かない）ときの機体の色
 const PODIUM_UNKNOWN_BODY := Color(0.18, 0.18, 0.19)
+
+# ---- 開発用のカメラ（view/arena/arena_view.gd、操作は view/arena/battle_screen.gd） ----
+## 見下ろす角度の範囲（度）、見る点からの距離の範囲、見る点をアリーナの外へ出せる幅
+const DEV_CAM_PITCH_MIN_DEG: float = 8.0
+const DEV_CAM_PITCH_MAX_DEG: float = 85.0
+const DEV_CAM_DIST_MIN: float = 3.0
+const DEV_CAM_DIST_MAX: float = 45.0
+const DEV_CAM_PAN_MARGIN: float = 6.0
+## 操作の効き：マウス1点あたりの回る角度（ラジアン）と動く距離（見る点からの距離に比例）、ホイール1回の近づき方、WASD の速さ（毎秒、距離に比例）
+const DEV_CAM_ORBIT_PER_PX: float = 0.006
+const DEV_CAM_PAN_PER_PX: float = 0.0016
+const DEV_CAM_ZOOM_STEP: float = 0.88
+const DEV_CAM_KEY_PAN: float = 0.9
