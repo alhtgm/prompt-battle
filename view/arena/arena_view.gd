@@ -1,5 +1,5 @@
 # 3Dのアリーナ。床・壁・穴・修理ステーションを置き、バトルの状態を読んで機体・弾・火花を映す。
-# 薄暗い中に吊った電球の光、穴の底の赤い光、修理ステーションの緑の光、霧。強い被弾で画面が揺れる。
+# 薄暗い中に吊った電球の光、壁の外の松明、穴の底の赤い光、修理ステーションの緑の光、霧。強い被弾で画面が揺れる。
 # 状態は読むだけで書き換えない。カメラは2機の真ん中を斜め上から追う。見た目の値は view/look.gd。
 # 開発用に、自由カメラ（見る点を中心に回す・動かす・近づく）と、機体1体を追うカメラに切り替えられる（操作は battle_screen）。
 extends Node3D
@@ -8,6 +8,7 @@ const GameData := preload("res://core/game_data.gd")
 const RobotView := preload("res://view/arena/robot_view.gd")
 const Look := preload("res://view/look.gd")
 const Grime := preload("res://view/grime.gd")
+const Torch := preload("res://view/arena/torch.gd")
 
 ## カメラの位置（見る点からのずれ）と追いかける速さ
 const CAMERA_OFFSET := Vector3(0, 14, 12)
@@ -33,6 +34,10 @@ var _look_at := Vector3.ZERO
 var _shake: float = 0.0
 var _time: float = 0.0
 var _shot_mat: StandardMaterial3D
+## 壁の外の松明
+var torches: Array[Node3D] = []
+## 床のタイル
+var floor_tiles: Array[MeshInstance3D] = []
 ## 開発用のカメラ：今の動き方、追う機体（TRACK のとき）、見る点、回す角度（左右・上下）、見る点からの距離
 var camera_mode: CameraMode = CameraMode.FOLLOW
 var track_index: int = 0
@@ -52,8 +57,16 @@ func setup(game_data: GameData) -> void:
 	_add_environment()
 	_add_lights(half)
 
-	# 床（汚れたコンクリート）と壁（さびた鉄板）
-	_box(Vector3(half * 2.0, 0.4, half * 2.0), Vector3(0, -0.2, 0), Grime.material(Look.FLOOR_COLOR, 0.0, 0.95, 0.08))
+	# 床（汚れたコンクリート）。模様を世界の座標で貼るので、タイルに分けても継ぎ目は見えない
+	var floor_mat: StandardMaterial3D = Grime.material(Look.FLOOR_COLOR, 0.0, 0.95, 0.08).duplicate()
+	floor_mat.uv1_world_triplanar = true
+	var n: int = maxi(1, ceili(half * 2.0 / Look.FLOOR_TILE))
+	var tile: float = half * 2.0 / float(n)
+	for ix: int in n:
+		for iz: int in n:
+			var c := Vector3(-half + tile * (ix + 0.5), -0.2, -half + tile * (iz + 0.5))
+			floor_tiles.append(_box(Vector3(tile, 0.4, tile), c, floor_mat))
+	# 壁（さびた鉄板）
 	var wall: StandardMaterial3D = Grime.material(Look.WALL_COLOR, 0.55, 0.75, 0.25)
 	for s: float in [-1.0, 1.0]:
 		_box(Vector3(half * 2.0 + 1.0, 1.2, 0.5), Vector3(0, 0.6, s * (half + 0.25)), wall)
@@ -70,6 +83,16 @@ func setup(game_data: GameData) -> void:
 		var c := Vector3(float(pad["x"]), 0.0, float(pad["z"]))
 		_disc(float(pad["r"]), c + Vector3(0, 0.02, 0), Grime.material(Look.PAD_COLOR, 0.2, 0.6, 0.5, Look.PAD_LIGHT * 0.5))
 		_light(c + Vector3(0, 1.2, 0), Look.PAD_LIGHT, Look.PAD_LIGHT_ENERGY, 5.0)
+
+	# 壁の外の松明
+	var reach: float = half + Look.TORCH_OUTSET
+	for i: int in Look.TORCH_SPOTS.size():
+		var spot: Vector2 = Look.TORCH_SPOTS[i]
+		var t: Node3D = Torch.new()
+		t.position = Vector3(spot.x * reach, 0.0, spot.y * reach)
+		add_child(t)
+		t.setup(float(i) * 1.37)  # 松明ごとに揺れをずらす
+		torches.append(t)
 
 	camera = Camera3D.new()
 	camera.fov = 55.0
@@ -140,6 +163,10 @@ func bind(battle_sim: Variant) -> void:
 func _process(delta: float) -> void:
 	if sim != null:
 		sync(delta)
+	else:
+		_time += delta
+	for t: Node3D in torches:
+		t.flicker(_time)
 
 
 ## バトルの状態を読んで、機体・弾・火花・カメラを合わせる
@@ -308,7 +335,7 @@ func _update_sparks(delta: float) -> void:
 			_sparks.remove_at(k)
 
 
-func _box(size: Vector3, pos: Vector3, mat: Material) -> void:
+func _box(size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = size
@@ -316,6 +343,7 @@ func _box(size: Vector3, pos: Vector3, mat: Material) -> void:
 	m.material_override = mat
 	m.position = pos
 	add_child(m)
+	return m
 
 
 func _disc(radius: float, pos: Vector3, mat: Material) -> void:
