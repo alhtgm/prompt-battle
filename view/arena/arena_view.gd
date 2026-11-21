@@ -1,6 +1,7 @@
 # 3Dのアリーナ。床・壁・穴・修理ステーションを置き、バトルの状態を読んで機体・弾・火花を映す。
 # 薄暗い中に吊った電球の光、壁の外の松明、穴の底の赤い光、修理ステーションの緑の光、霧。強い被弾で画面が揺れる。
 # 状態は読むだけで書き換えない。カメラは2機の真ん中を斜め上から追う。見た目の値は view/look.gd。
+# 開発用に、自由カメラ（見る点を中心に回す・動かす・近づく）と、機体1体を追うカメラに切り替えられる（操作は battle_screen）。
 extends Node3D
 
 const GameData := preload("res://core/game_data.gd")
@@ -19,6 +20,9 @@ const LABEL_LIFT: float = 0.8
 ## 火花が消えるまでの秒数
 const SPARK_LIFE: float = 0.6
 
+## カメラの動き方：いつもの追いかけるカメラ／自由カメラ／機体1体を追う
+enum CameraMode { FOLLOW, FREE, TRACK }
+
 var data: GameData
 var sim: Variant = null
 var robot_views: Array[Node3D] = []
@@ -34,6 +38,15 @@ var _shot_mat: StandardMaterial3D
 var torches: Array[Node3D] = []
 ## 床のタイル
 var floor_tiles: Array[MeshInstance3D] = []
+## 開発用のカメラ：今の動き方、追う機体（TRACK のとき）、見る点、回す角度（左右・上下）、見る点からの距離
+var camera_mode: CameraMode = CameraMode.FOLLOW
+var track_index: int = 0
+var cam_pivot := Vector3.ZERO
+var cam_yaw: float = 0.0
+var cam_pitch: float = 0.0
+var cam_dist: float = 0.0
+## 止めている（開発用の一時停止）。機体の動きや火花も止め、カメラだけ動かせるようにする
+var paused: bool = false
 var _spark_mat: StandardMaterial3D
 
 
@@ -158,6 +171,9 @@ func _process(delta: float) -> void:
 
 ## バトルの状態を読んで、機体・弾・火花・カメラを合わせる
 func sync(delta: float) -> void:
+	var cam_delta: float = delta
+	if paused:
+		delta = 0.0  # 止めている間は、機体の落ちる動きや火花も止める（カメラだけ動かせる）
 	_time += delta
 	for i: int in 2:
 		robot_views[i].sync(sim.robots[i], delta)
@@ -167,9 +183,76 @@ func sync(delta: float) -> void:
 	_look_at = _look_at.lerp(_midpoint(), minf(1.0, CAMERA_FOLLOW * delta))
 	# 揺れは時間の関数で作る（乱数は使わない）
 	_shake = maxf(0.0, _shake - Look.SHAKE_DECAY * delta * _shake)
+	if camera_mode != CameraMode.FOLLOW:
+		_sync_dev_camera(cam_delta)
+		return
 	var wobble := Vector3(sin(_time * 53.0), cos(_time * 47.0), sin(_time * 61.0)) * _shake
 	camera.position = _look_at + CAMERA_OFFSET + wobble
 	camera.look_at(_look_at + wobble * 0.5)
+
+
+# ---- 開発用のカメラ ----
+
+## 自由カメラにする（今のカメラの位置から始める）
+func dev_free_camera() -> void:
+	if camera_mode == CameraMode.FOLLOW:
+		cam_pivot = _look_at
+		var off: Vector3 = CAMERA_OFFSET
+		cam_dist = off.length()
+		cam_yaw = atan2(off.x, off.z)
+		cam_pitch = asin(clampf(off.y / cam_dist, -1.0, 1.0))
+	camera_mode = CameraMode.FREE
+
+
+## 見る点を中心に回す（dx：左右、dy：上下。ラジアン）
+func dev_orbit(dx: float, dy: float) -> void:
+	dev_free_camera_keep_track()
+	cam_yaw = wrapf(cam_yaw - dx, -PI, PI)
+	cam_pitch = clampf(cam_pitch + dy, deg_to_rad(Look.DEV_CAM_PITCH_MIN_DEG), deg_to_rad(Look.DEV_CAM_PITCH_MAX_DEG))
+
+
+## 平行に動かす（right：画面の右へ、forward：画面の奥へ。メートル）。機体を追っていたら自由カメラに切り替える
+func dev_pan(right: float, forward: float) -> void:
+	dev_free_camera()
+	var r := Vector3(cos(cam_yaw), 0.0, -sin(cam_yaw))
+	var f := Vector3(-sin(cam_yaw), 0.0, -cos(cam_yaw))
+	var lim: float = float(data.rule("battle.arena.half_size")) + Look.DEV_CAM_PAN_MARGIN
+	cam_pivot += r * right + f * forward
+	cam_pivot.x = clampf(cam_pivot.x, -lim, lim)
+	cam_pivot.z = clampf(cam_pivot.z, -lim, lim)
+
+
+## 近づく・離れる（factor が 1 より小さいと近づく）
+func dev_zoom(factor: float) -> void:
+	dev_free_camera_keep_track()
+	cam_dist = clampf(cam_dist * factor, Look.DEV_CAM_DIST_MIN, Look.DEV_CAM_DIST_MAX)
+
+
+## 機体1体を中心に追う（i は 0 か 1）
+func dev_track(i: int) -> void:
+	dev_free_camera()
+	track_index = clampi(i, 0, 1)
+	camera_mode = CameraMode.TRACK
+
+
+## いつもの追いかけるカメラに戻す
+func dev_reset_camera() -> void:
+	camera_mode = CameraMode.FOLLOW
+
+
+## 回す・近づく操作では、機体を追っているならそのまま追い続ける
+func dev_free_camera_keep_track() -> void:
+	if camera_mode == CameraMode.FOLLOW:
+		dev_free_camera()
+
+
+func _sync_dev_camera(delta: float) -> void:
+	if camera_mode == CameraMode.TRACK and sim != null:
+		var r: Variant = sim.robots[track_index]
+		cam_pivot = cam_pivot.lerp(Vector3(r.x, 0.0, r.z), minf(1.0, CAMERA_FOLLOW * 2.0 * delta))
+	var dir := Vector3(sin(cam_yaw) * cos(cam_pitch), sin(cam_pitch), cos(cam_yaw) * cos(cam_pitch))
+	camera.position = cam_pivot + dir * cam_dist
+	camera.look_at(cam_pivot)  # 自由に動かしている間は揺らさない（見たいところがぶれないように）
 
 
 func _midpoint() -> Vector3:

@@ -233,3 +233,16 @@ const PODIUM_STAGE: Dictionary = {
 }
 ## 順位が分からない（通信対戦で相手の機体が届かない）ときの機体の色
 const PODIUM_UNKNOWN_BODY := Color(0.18, 0.18, 0.19)
+
+# ---- 開発用のカメラ（view/arena/arena_view.gd、操作は view/arena/battle_screen.gd） ----
+## 見下ろす角度の範囲（度）、見る点からの距離の範囲、見る点をアリーナの外へ出せる幅
+const DEV_CAM_PITCH_MIN_DEG: float = 8.0
+const DEV_CAM_PITCH_MAX_DEG: float = 85.0
+const DEV_CAM_DIST_MIN: float = 3.0
+const DEV_CAM_DIST_MAX: float = 45.0
+const DEV_CAM_PAN_MARGIN: float = 6.0
+## 操作の効き：マウス1点あたりの回る角度（ラジアン）と動く距離（見る点からの距離に比例）、ホイール1回の近づき方、WASD の速さ（毎秒、距離に比例）
+const DEV_CAM_ORBIT_PER_PX: float = 0.006
+const DEV_CAM_PAN_PER_PX: float = 0.0016
+const DEV_CAM_ZOOM_STEP: float = 0.88
+const DEV_CAM_KEY_PAN: float = 0.9
