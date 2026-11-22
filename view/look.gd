@@ -35,6 +35,26 @@ const FILL_ENERGY: float = 0.55
 ## 穴の縁を照らす赤い光
 const PIT_LIGHT := Color(1.0, 0.18, 0.08)
 const PIT_LIGHT_ENERGY: float = 3.0
+## 壁の外に立てる松明（view/arena/torch.gd）。置く場所は四隅と各辺の真ん中（-1〜1 の割合 × 壁までの距離）
+const TORCH_SPOTS: Array[Vector2] = [
+	Vector2(-1, -1), Vector2(0, -1), Vector2(1, -1), Vector2(-1, 0),
+	Vector2(1, 0), Vector2(-1, 1), Vector2(0, 1), Vector2(1, 1),
+]
+## 壁の外側へどれだけ離すか、柱の高さ
+const TORCH_OUTSET: float = 0.9
+const TORCH_HEIGHT: float = 2.0
+## 火の色と光の色・明るさ・届く距離・減り方（明るすぎないよう、真ん中の電球より弱く、壁ぎわ数メートルだけ照らす）
+const TORCH_FLAME_COLOR := Color(1.0, 0.6, 0.2)
+const TORCH_LIGHT_COLOR := Color(1.0, 0.55, 0.22)
+const TORCH_ENERGY: float = 6.0
+const TORCH_RANGE: float = 10.0
+const TORCH_ATTENUATION: float = 1.2
+## 明るさの揺れの大きさ（0.2 なら ±20%）と、火の粉の数
+const TORCH_FLICKER: float = 0.2
+const TORCH_EMBERS: int = 6
+## 床を何メートル四方のタイルに分けるか（1つの物を照らせる光は8つまでなので、
+## 床を分けて、どのタイルにも近くの光だけが当たるようにする。Compatibility の制限）
+const FLOOR_TILE: float = 5.0
 
 # ---- 質感 ----
 const FLOOR_COLOR := Color(0.36, 0.35, 0.33)
@@ -180,6 +200,56 @@ const SHAKE_DAMAGE: float = 8.0
 const SHAKE_AMOUNT: float = 0.35
 const SHAKE_DECAY: float = 6.0
 
+# ---- 撃つ武器の弾（view/arena/shot_fx.gd） ----
+## 弾の高さ（床から）
+const SHOT_HEIGHT: float = 0.9
+## ロケットの見た目にする武器（パーツID）。ほかの撃つ武器は曳光弾
+const ROCKET_WEAPONS: Array[String] = ["weapon_rocket"]
+## 曳光弾：太さ、明るい芯の長さ、後ろへ伸びる薄い尾の長さと濃さ、色（低い解像度でも1画素以上に見える太さ）
+const TRACER_WIDTH: float = 0.09
+const TRACER_LENGTH: float = 0.8
+const TRACER_TAIL_LENGTH: float = 1.4
+const TRACER_TAIL_ALPHA: float = 0.35
+const TRACER_COLOR := Color(1.0, 0.85, 0.45)
+## 銃口の光：色、大きさ（半径）、消えるまでの秒数
+const MUZZLE_COLOR := Color(1.0, 0.92, 0.7)
+const MUZZLE_SIZE: float = 0.22
+const MUZZLE_LIFE: float = 0.07
+## 機関銃の弾が当たった所：火花の数・消えるまでの秒数・速さ・散らばる角度、光の大きさ
+const BULLET_SPARK_AMOUNT: int = 14
+const BULLET_SPARK_LIFE: float = 0.4
+const BULLET_SPARK_SPEED: float = 7.0
+const BULLET_SPARK_SPREAD_DEG: float = 40.0
+const BULLET_HIT_FLASH_SIZE: float = 0.28
+## 当たったかの見分け：最後に見た位置から何秒前までの道のりを見るか、機体の半径に足すゆとり、壁までの距離のゆとり
+const SHOT_HIT_LOOKBACK_SEC: float = 0.08
+const SHOT_HIT_MARGIN: float = 0.35
+const SHOT_WALL_MARGIN: float = 0.8
+## ロケット：太さ（半径）・長さ、筒と先の色、噴射炎の長さ・色・伸び縮み（±の割合）
+const ROCKET_RADIUS: float = 0.14
+const ROCKET_LENGTH: float = 0.85
+const ROCKET_BODY_COLOR := Color(0.42, 0.43, 0.4)
+const ROCKET_NOSE_COLOR := Color(0.7, 0.16, 0.1)
+const ROCKET_FLAME_LENGTH: float = 0.75
+const ROCKET_FLAME_COLOR := Color(1.0, 0.6, 0.2)
+const ROCKET_FLAME_FLICKER: float = 0.25
+## ロケットの煙の尾：出し続ける煙の数・消えるまでの秒数。煙の色
+const ROCKET_TRAIL_AMOUNT: int = 50
+const ROCKET_TRAIL_LIFE: float = 1.0
+const SHOT_SMOKE_COLOR := Color(0.2, 0.19, 0.18)
+## ロケットを撃った瞬間：光の大きさ・秒数、煙のひと吹きの数
+const ROCKET_MUZZLE_SIZE: float = 0.45
+const ROCKET_MUZZLE_LIFE: float = 0.14
+const ROCKET_MUZZLE_SMOKE: int = 8
+## ロケットの爆発：火の玉の大きさ（半径）・秒数・色、火花の数、煙の数（火の玉と光は機体に隠れないよう手前に重ねて描く）
+const ROCKET_BLAST_SIZE: float = 1.3
+const ROCKET_BLAST_LIFE: float = 0.5
+const ROCKET_FIRE_COLOR := Color(1.0, 0.5, 0.15)
+## 爆発の芯の色（火の玉の内側に重ねる明るい黄色）
+const ROCKET_CORE_COLOR := Color(1.0, 0.85, 0.45)
+const ROCKET_BLAST_SPARKS: int = 36
+const ROCKET_BLAST_SMOKE: int = 16
+
 # ---- 文字と板（画面の作り） ----
 const UI_BG := Color(0.06, 0.06, 0.065)
 const UI_PANEL := Color(0.09, 0.085, 0.08, 0.88)
@@ -282,3 +352,16 @@ const PODIUM_STAGE: Dictionary = {
 }
 ## 順位が分からない（通信対戦で相手の機体が届かない）ときの機体の色
 const PODIUM_UNKNOWN_BODY := Color(0.18, 0.18, 0.19)
+
+# ---- 開発用のカメラ（view/arena/arena_view.gd、操作は view/arena/battle_screen.gd） ----
+## 見下ろす角度の範囲（度）、見る点からの距離の範囲、見る点をアリーナの外へ出せる幅
+const DEV_CAM_PITCH_MIN_DEG: float = 8.0
+const DEV_CAM_PITCH_MAX_DEG: float = 85.0
+const DEV_CAM_DIST_MIN: float = 3.0
+const DEV_CAM_DIST_MAX: float = 45.0
+const DEV_CAM_PAN_MARGIN: float = 6.0
+## 操作の効き：マウス1点あたりの回る角度（ラジアン）と動く距離（見る点からの距離に比例）、ホイール1回の近づき方、WASD の速さ（毎秒、距離に比例）
+const DEV_CAM_ORBIT_PER_PX: float = 0.006
+const DEV_CAM_PAN_PER_PX: float = 0.0016
+const DEV_CAM_ZOOM_STEP: float = 0.88
+const DEV_CAM_KEY_PAN: float = 0.9

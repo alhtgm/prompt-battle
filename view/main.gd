@@ -39,6 +39,10 @@ var agents: DefaultAgents = null
 var _shown_phase: String = ""
 ## 開発用：どの画面からでもすぐタイトルへ戻るボタン（タイトル画面と、製品の書き出しでは出さない）
 var dev_title_button: Button
+## 開発用の一時停止（ひとりで遊ぶときだけ。どの段階でも、試合を1刻みも進めない）。Space で切り替え、止めている間は . で1コマ送り
+var dev_paused: bool = false
+var dev_pause_label: Label
+var _step_pending: int = 0
 var _shown_round: int = -1
 
 
@@ -123,9 +127,72 @@ func _add_dev_title_button() -> void:
 	dev_title_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 4)
 	dev_title_button.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	dev_title_button.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	# 一時停止中の札（開発用の戻るボタンのすぐ上）
+	dev_pause_label = Label.new()
+	dev_pause_label.text = "一時停止中（Space で再開、. で1コマ送り）"
+	dev_pause_label.add_theme_font_size_override("font_size", 18)
+	dev_pause_label.add_theme_color_override("font_color", Look.UI_ACCENT)
+	var ps := StyleBoxFlat.new()
+	ps.bg_color = Color(0, 0, 0, 0.75)
+	ps.border_color = Look.UI_ACCENT
+	ps.set_border_width_all(1)
+	ps.set_content_margin_all(8)
+	dev_pause_label.add_theme_stylebox_override("normal", ps)
+	dev_pause_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dev_pause_label.visible = false
+	layer.add_child(dev_pause_label)
+	dev_pause_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 44)
+	dev_pause_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	dev_pause_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+
+## 開発用の一時停止ができるか（開発用の実行で、ひとりで遊んでいる試合があるとき。通信対戦は進めるのがサーバーなので止められない）
+func can_dev_pause() -> bool:
+	return OS.is_debug_build() and session != null and not session.is_online()
+
+
+## 一時停止を切り替える（止められないときは解くだけ）
+func toggle_dev_pause() -> void:
+	set_dev_paused(not dev_paused and can_dev_pause())
+
+
+func set_dev_paused(on: bool) -> void:
+	dev_paused = on
+	_step_pending = 0
+	if dev_pause_label != null:
+		dev_pause_label.visible = on
+
+
+## 止めている間に1コマ（1刻み）だけ進める
+func dev_step() -> void:
+	if dev_paused:
+		_step_pending += 1
+
+
+## 一時停止のキー（Space と .）は、画面のボタンより先に受け取る（Space がボタンを押してしまわないように）。
+## ただし文字の欄に入力しているときは、ふつうの文字として扱う
+func _input(event: InputEvent) -> void:
+	var k := event as InputEventKey
+	if k == null or not k.pressed or k.echo or not OS.is_debug_build():
+		return
+	if k.keycode != KEY_SPACE and k.keycode != KEY_PERIOD:
+		return
+	var focus: Control = get_viewport().gui_get_focus_owner()
+	if focus is TextEdit or focus is LineEdit:
+		return
+	if k.keycode == KEY_SPACE:
+		if not can_dev_pause():
+			return
+		toggle_dev_pause()
+	else:
+		if not dev_paused:
+			return
+		dev_step()
+	get_viewport().set_input_as_handled()
 
 
 func show_title() -> void:
+	set_dev_paused(false)
 	leave_online()
 	session = null
 	_shown_phase = ""
@@ -184,6 +251,7 @@ func start_game(seed_value: int = 0) -> void:
 		setup.append({"name": "CPU%d" % i, "is_human": false})
 	session = MatchSession.new(data, seed_value, setup, agents)
 	battle_speed = 1.0
+	set_dev_paused(false)
 	_shown_phase = ""
 	_sync_screen()
 
@@ -204,6 +272,17 @@ func _process(delta: float) -> void:
 	var me: Variant = session.get_player(human_id)
 	if me == null:
 		return
+	if dev_paused:
+		if not can_dev_pause():
+			set_dev_paused(false)
+		else:
+			# 止めている間は進めない。1コマ送りのときだけ、1刻み分（速さの倍率はかけない）進める
+			if _step_pending > 0:
+				_step_pending -= 1
+				session.update(1.0 / float(data.rule("tick_rate")))
+			# 止めていても、操作（出撃ボタンなど）で段階が変わったら画面は切り替える
+			_sync_screen()
+			return
 	if not me.alive:  # 脱落したら自分の操作はないので、そのまま進める
 		if session.phase == MatchSession.PHASE_BUILD:
 			session.finish_build()

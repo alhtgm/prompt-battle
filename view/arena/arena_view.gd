@@ -1,13 +1,17 @@
 # 3Dのアリーナ。床・壁・穴を置き、バトルの状態を読んで機体・弾・回復パック・火花を映す。
-# 薄暗い中に吊った電球の光、穴の底の赤い光、霧。強い被弾で画面が揺れる。
+# 薄暗い中に吊った電球の光、壁の外の松明、穴の底の赤い光、霧。強い被弾で画面が揺れる。
 # 状態は読むだけで書き換えない。カメラは2機の真ん中を斜め上から追う。見た目の値は view/look.gd。
+# 開発用に、自由カメラ（見る点を中心に回す・動かす・近づく）と、機体1体を追うカメラに切り替えられる（操作は battle_screen）。
 extends Node3D
 
 const GameData := preload("res://core/game_data.gd")
+## 撃つ武器の弾の見た目と、撃つ・当たるときの演出
+const ShotFx := preload("res://view/arena/shot_fx.gd")
 const RobotView := preload("res://view/arena/robot_view.gd")
 const Look := preload("res://view/look.gd")
 const Grime := preload("res://view/grime.gd")
 const HealthPackView := preload("res://view/arena/health_pack_view.gd")
+const Torch := preload("res://view/arena/torch.gd")
 
 ## カメラの位置（見る点からのずれ）と追いかける速さ
 const CAMERA_OFFSET := Vector3(0, 14, 12)
@@ -19,11 +23,14 @@ const LABEL_LIFT: float = 0.8
 ## 火花が消えるまでの秒数
 const SPARK_LIFE: float = 0.6
 
+## カメラの動き方：いつもの追いかけるカメラ／自由カメラ／機体1体を追う
+enum CameraMode { FOLLOW, FREE, TRACK }
+
 var data: GameData
 var sim: Variant = null
 var robot_views: Array[Node3D] = []
 var camera: Camera3D
-var _shots: Array[MeshInstance3D] = []
+var shot_fx: Node3D
 ## 回復パックの見た目（view/arena/health_pack_view.gd）
 var health_packs: Node3D = null
 var _sparks: Array = []  # [ノード, 残り時間]
@@ -31,8 +38,22 @@ var _log_seen: int = 0
 var _look_at := Vector3.ZERO
 var _shake: float = 0.0
 var _time: float = 0.0
-var _shot_mat: StandardMaterial3D
+## 壁の外の松明
+var torches: Array[Node3D] = []
+## 床のタイル
+var floor_tiles: Array[MeshInstance3D] = []
+## 開発用のカメラ：今の動き方、追う機体（TRACK のとき）、見る点、回す角度（左右・上下）、見る点からの距離
+var camera_mode: CameraMode = CameraMode.FOLLOW
+var track_index: int = 0
+var cam_pivot := Vector3.ZERO
+var cam_yaw: float = 0.0
+var cam_pitch: float = 0.0
+var cam_dist: float = 0.0
+## 止めている（開発用の一時停止）。機体の動きや火花も止め、カメラだけ動かせるようにする
+var paused: bool = false
 var _spark_mat: StandardMaterial3D
+## 撃つ武器の名前（被弾の記録の武器名）→ パーツID。撃つ武器の被弾の火花は shot_fx が当たった所に出すので、ここでは出さない
+var _shoot_names: Dictionary = {}
 
 
 func setup(game_data: GameData) -> void:
@@ -42,8 +63,16 @@ func setup(game_data: GameData) -> void:
 	_add_environment()
 	_add_lights(half)
 
-	# 床（汚れたコンクリート）と壁（さびた鉄板）
-	_box(Vector3(half * 2.0, 0.4, half * 2.0), Vector3(0, -0.2, 0), Grime.material(Look.FLOOR_COLOR, 0.0, 0.95, 0.08))
+	# 床（汚れたコンクリート）。模様を世界の座標で貼るので、タイルに分けても継ぎ目は見えない
+	var floor_mat: StandardMaterial3D = Grime.material(Look.FLOOR_COLOR, 0.0, 0.95, 0.08).duplicate()
+	floor_mat.uv1_world_triplanar = true
+	var n: int = maxi(1, ceili(half * 2.0 / Look.FLOOR_TILE))
+	var tile: float = half * 2.0 / float(n)
+	for ix: int in n:
+		for iz: int in n:
+			var c := Vector3(-half + tile * (ix + 0.5), -0.2, -half + tile * (iz + 0.5))
+			floor_tiles.append(_box(Vector3(tile, 0.4, tile), c, floor_mat))
+	# 壁（さびた鉄板）
 	var wall: StandardMaterial3D = Grime.material(Look.WALL_COLOR, 0.55, 0.75, 0.25)
 	for s: float in [-1.0, 1.0]:
 		_box(Vector3(half * 2.0 + 1.0, 1.2, 0.5), Vector3(0, 0.6, s * (half + 0.25)), wall)
@@ -56,6 +85,16 @@ func setup(game_data: GameData) -> void:
 		_disc(r, c + Vector3(0, 0.02, 0), _flat(Color(0.0, 0.0, 0.0)))
 		_light(c + Vector3(0, 0.6, 0), Look.PIT_LIGHT, Look.PIT_LIGHT_ENERGY, r * 2.2)
 
+	# 壁の外の松明
+	var reach: float = half + Look.TORCH_OUTSET
+	for i: int in Look.TORCH_SPOTS.size():
+		var spot: Vector2 = Look.TORCH_SPOTS[i]
+		var t: Node3D = Torch.new()
+		t.position = Vector3(spot.x * reach, 0.0, spot.y * reach)
+		add_child(t)
+		t.setup(float(i) * 1.37)  # 松明ごとに揺れをずらす
+		torches.append(t)
+
 	camera = Camera3D.new()
 	camera.fov = 55.0
 	camera.current = true
@@ -63,7 +102,12 @@ func setup(game_data: GameData) -> void:
 	camera.position = CAMERA_OFFSET
 	camera.look_at(Vector3.ZERO)
 
-	_shot_mat = _glow_mat(Color(1.0, 0.9, 0.55))
+	shot_fx = ShotFx.new()
+	add_child(shot_fx)
+	shot_fx.setup(half, float(data.rule("battle.robot.radius")))
+	for def: Variant in data.parts:
+		if str(def.behavior) == "shoot":
+			_shoot_names[str(def.name)] = str(def.id)
 	_spark_mat = _glow_mat(Look.SPARK_COLOR)
 
 
@@ -130,14 +174,21 @@ func bind(battle_sim: Variant) -> void:
 func _process(delta: float) -> void:
 	if sim != null:
 		sync(delta)
+	else:
+		_time += delta
+	for t: Node3D in torches:
+		t.flicker(_time)
 
 
 ## バトルの状態を読んで、機体・弾・火花・カメラを合わせる
 func sync(delta: float) -> void:
+	var cam_delta: float = delta
+	if paused:
+		delta = 0.0  # 止めている間は、機体の落ちる動きや火花も止める（カメラだけ動かせる）
 	_time += delta
 	for i: int in 2:
 		robot_views[i].sync(sim.robots[i], delta)
-	_sync_shots()
+	shot_fx.sync(sim, delta)
 	if health_packs != null and health_packs.is_inside_tree() and "packs" in sim:
 		health_packs.sync(sim.packs, delta)
 	_spawn_sparks()
@@ -145,9 +196,76 @@ func sync(delta: float) -> void:
 	_look_at = _look_at.lerp(_midpoint(), minf(1.0, CAMERA_FOLLOW * delta))
 	# 揺れは時間の関数で作る（乱数は使わない）
 	_shake = maxf(0.0, _shake - Look.SHAKE_DECAY * delta * _shake)
+	if camera_mode != CameraMode.FOLLOW:
+		_sync_dev_camera(cam_delta)
+		return
 	var wobble := Vector3(sin(_time * 53.0), cos(_time * 47.0), sin(_time * 61.0)) * _shake
 	camera.position = _look_at + CAMERA_OFFSET + wobble
 	camera.look_at(_look_at + wobble * 0.5)
+
+
+# ---- 開発用のカメラ ----
+
+## 自由カメラにする（今のカメラの位置から始める）
+func dev_free_camera() -> void:
+	if camera_mode == CameraMode.FOLLOW:
+		cam_pivot = _look_at
+		var off: Vector3 = CAMERA_OFFSET
+		cam_dist = off.length()
+		cam_yaw = atan2(off.x, off.z)
+		cam_pitch = asin(clampf(off.y / cam_dist, -1.0, 1.0))
+	camera_mode = CameraMode.FREE
+
+
+## 見る点を中心に回す（dx：左右、dy：上下。ラジアン）
+func dev_orbit(dx: float, dy: float) -> void:
+	dev_free_camera_keep_track()
+	cam_yaw = wrapf(cam_yaw - dx, -PI, PI)
+	cam_pitch = clampf(cam_pitch + dy, deg_to_rad(Look.DEV_CAM_PITCH_MIN_DEG), deg_to_rad(Look.DEV_CAM_PITCH_MAX_DEG))
+
+
+## 平行に動かす（right：画面の右へ、forward：画面の奥へ。メートル）。機体を追っていたら自由カメラに切り替える
+func dev_pan(right: float, forward: float) -> void:
+	dev_free_camera()
+	var r := Vector3(cos(cam_yaw), 0.0, -sin(cam_yaw))
+	var f := Vector3(-sin(cam_yaw), 0.0, -cos(cam_yaw))
+	var lim: float = float(data.rule("battle.arena.half_size")) + Look.DEV_CAM_PAN_MARGIN
+	cam_pivot += r * right + f * forward
+	cam_pivot.x = clampf(cam_pivot.x, -lim, lim)
+	cam_pivot.z = clampf(cam_pivot.z, -lim, lim)
+
+
+## 近づく・離れる（factor が 1 より小さいと近づく）
+func dev_zoom(factor: float) -> void:
+	dev_free_camera_keep_track()
+	cam_dist = clampf(cam_dist * factor, Look.DEV_CAM_DIST_MIN, Look.DEV_CAM_DIST_MAX)
+
+
+## 機体1体を中心に追う（i は 0 か 1）
+func dev_track(i: int) -> void:
+	dev_free_camera()
+	track_index = clampi(i, 0, 1)
+	camera_mode = CameraMode.TRACK
+
+
+## いつもの追いかけるカメラに戻す
+func dev_reset_camera() -> void:
+	camera_mode = CameraMode.FOLLOW
+
+
+## 回す・近づく操作では、機体を追っているならそのまま追い続ける
+func dev_free_camera_keep_track() -> void:
+	if camera_mode == CameraMode.FOLLOW:
+		dev_free_camera()
+
+
+func _sync_dev_camera(delta: float) -> void:
+	if camera_mode == CameraMode.TRACK and sim != null:
+		var r: Variant = sim.robots[track_index]
+		cam_pivot = cam_pivot.lerp(Vector3(r.x, 0.0, r.z), minf(1.0, CAMERA_FOLLOW * 2.0 * delta))
+	var dir := Vector3(sin(cam_yaw) * cos(cam_pitch), sin(cam_pitch), cos(cam_yaw) * cos(cam_pitch))
+	camera.position = cam_pivot + dir * cam_dist
+	camera.look_at(cam_pivot)  # 自由に動かしている間は揺らさない（見たいところがぶれないように）
 
 
 func _midpoint() -> Vector3:
@@ -155,22 +273,6 @@ func _midpoint() -> Vector3:
 	var b: Variant = sim.robots[1]
 	return Vector3(clampf((a.x + b.x) * 0.5, -CAMERA_LIMIT, CAMERA_LIMIT), 0.0,
 		clampf((a.z + b.z) * 0.5, -CAMERA_LIMIT, CAMERA_LIMIT))
-
-
-func _sync_shots() -> void:
-	while _shots.size() < sim.shots.size():
-		var m := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.18, 0.18, 0.18)
-		m.mesh = mesh
-		m.material_override = _shot_mat
-		add_child(m)
-		_shots.append(m)
-	for k: int in _shots.size():
-		var on: bool = k < sim.shots.size()
-		_shots[k].visible = on
-		if on:
-			_shots[k].position = Vector3(sim.shots[k].x, 0.9, sim.shots[k].z)
 
 
 ## 新しく起きた出来事から、火花・画面の揺れを出す
@@ -199,6 +301,9 @@ func _spawn_sparks() -> void:
 		if big:
 			# 穴に落ちたときは、光の柱が吹き上がるのに合わせて大きく揺らす
 			_shake = maxf(_shake, Look.FALL_BURST_SHAKE if t == "fall" else Look.SHAKE_AMOUNT)
+		if t == "hit" and _shoot_names.has(str(e.get("weapon", ""))):
+			shot_fx.on_shot_hit(sim, int(e["robot"]), int(e.get("by", -1)), _shoot_names[str(e["weapon"])])
+			continue
 		if t == "fall":
 			continue
 		_burst(Vector3(r.x, 0.9, r.z), 24 if big else 8)
@@ -237,7 +342,7 @@ func _update_sparks(delta: float) -> void:
 			_sparks.remove_at(k)
 
 
-func _box(size: Vector3, pos: Vector3, mat: Material) -> void:
+func _box(size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = size
@@ -245,6 +350,7 @@ func _box(size: Vector3, pos: Vector3, mat: Material) -> void:
 	m.material_override = mat
 	m.position = pos
 	add_child(m)
+	return m
 
 
 func _disc(radius: float, pos: Vector3, mat: Material) -> void:

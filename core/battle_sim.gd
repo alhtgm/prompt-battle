@@ -34,15 +34,17 @@ class Shot:
 	var knockback: float = 0.0
 	var life: float = 0.0
 	var label: String = ""
-	## 弾の通し番号（画面が、どの弾がどこで消えたかを見分けるため）と、撃った武器の型
+	## 試合の中で弾ごとに違う番号（撃った順）と、撃った武器のパーツID。画面が弾を見分けて、見た目を変えるために使う。計算には使わない
 	var id: int = 0
-	var def_id: String = ""
+	var weapon: String = ""
 
 
 var data: GameData
 var rng: Rng
 var robots: Array[Robot] = []
 var shots: Array[Shot] = []
+## 次に撃つ弾の番号
+var _next_shot_id: int = 1
 var tick: int = 0
 var tick_rate: int = 60
 var dt: float = 1.0 / 60.0
@@ -62,8 +64,6 @@ var _think_min_gap: float = 0.5
 var _say_max: int = 40
 ## 自爆のダメージを与えている最中（壊された相手の自爆装置には火をつけない）
 var _blasting: bool = false
-## 次に撃つ弾の通し番号
-var _next_shot_id: int = 1
 ## 回復パック。1つは {"id", "x", "z", "big", "heal", "active", "t"}。active でなければ t 秒後に別の場所へ出る
 var packs: Array[Dictionary] = []
 var _pack_rng: Rng
@@ -480,9 +480,9 @@ func _weapons(i: int) -> void:
 					s.knockback = kb
 					s.life = def.get_fixed("range") / maxf(0.01, spd)
 					s.label = def.name
-					s.def_id = def.id
 					s.id = _next_shot_id
 					_next_shot_id += 1
+					s.weapon = def.id
 					shots.append(s)
 					events.append({"type": "shot", "robot": i, "weapon": def.name})
 					if w.ammo == 0:
