@@ -51,6 +51,14 @@ var cam_pitch: float = 0.0
 var cam_dist: float = 0.0
 ## 止めている（開発用の一時停止）。機体の動きや火花も止め、カメラだけ動かせるようにする
 var paused: bool = false
+## 演出の時間の倍率（battle_screen が main.cinematic_scale を入れる）。見た目の動きにかける
+var time_scale: float = 1.0
+var _cine_focus := Vector3.ZERO
+var _cine_w: float = 0.0
+var _cine_z: float = 0.0
+var _cine_target_w: float = 0.0
+var _cine_target_z: float = 0.0
+var _punch: float = 0.0
 var _spark_mat: StandardMaterial3D
 ## 撃つ武器の名前（被弾の記録の武器名）→ パーツID。撃つ武器の被弾の火花は shot_fx が当たった所に出すので、ここでは出さない
 var _shoot_names: Dictionary = {}
@@ -96,7 +104,7 @@ func setup(game_data: GameData) -> void:
 		torches.append(t)
 
 	camera = Camera3D.new()
-	camera.fov = 55.0
+	camera.fov = Look.CAMERA_FOV
 	camera.current = true
 	add_child(camera)
 	camera.position = CAMERA_OFFSET
@@ -185,6 +193,7 @@ func sync(delta: float) -> void:
 	var cam_delta: float = delta
 	if paused:
 		delta = 0.0  # 止めている間は、機体の落ちる動きや火花も止める（カメラだけ動かせる）
+	delta *= time_scale  # 演出の時間の倍率（一瞬止める・ゆっくりにする）は、見た目の動きにもかける
 	_time += delta
 	for i: int in 2:
 		robot_views[i].sync(sim.robots[i], delta)
@@ -199,9 +208,35 @@ func sync(delta: float) -> void:
 	if camera_mode != CameraMode.FOLLOW:
 		_sync_dev_camera(cam_delta)
 		return
-	var wobble := Vector3(sin(_time * 53.0), cos(_time * 47.0), sin(_time * 61.0)) * _shake
-	camera.position = _look_at + CAMERA_OFFSET + wobble
-	camera.look_at(_look_at + wobble * 0.5)
+	# 演出のカメラ：決着のときに負けた機体へ寄る、強い一撃でぐっと押し込む（どちらも実時間で動かす）
+	_cine_w = move_toward(_cine_w, _cine_target_w, cam_delta * Look.CINE_CAMERA_SPEED)
+	_cine_z = move_toward(_cine_z, _cine_target_z, cam_delta * Look.CINE_CAMERA_SPEED)
+	_punch = maxf(0.0, _punch - cam_delta * Look.PUNCH_DECAY)
+	var target: Vector3 = _look_at.lerp(_cine_focus, _cine_w)
+	var offset: Vector3 = CAMERA_OFFSET * (1.0 - Look.CINE_ZOOM_MAX * _cine_z - Look.PUNCH_ZOOM * _punch)
+	var wobble := Vector3(sin(_time * 53.0), cos(_time * 47.0), sin(_time * 61.0)) * (_shake + _punch * Look.PUNCH_SHAKE)
+	camera.position = target + offset + wobble
+	camera.look_at(target + wobble * 0.5)
+	camera.fov = Look.CAMERA_FOV - Look.PUNCH_FOV * _punch
+
+
+# ---- 演出のカメラ（battle_director.gd が使う） ----
+
+## focus（世界の座標）へ weight の割合で寄せ、zoom の割合で近づく（0〜1）。ゆっくり移る
+func set_cinematic(focus: Vector3, weight: float, zoom: float) -> void:
+	_cine_focus = focus
+	_cine_target_w = clampf(weight, 0.0, 1.0)
+	_cine_target_z = clampf(zoom, 0.0, 1.0)
+
+
+func clear_cinematic() -> void:
+	_cine_target_w = 0.0
+	_cine_target_z = 0.0
+
+
+## 強い一撃でカメラをぐっと押し込む（strength は 0〜1。すぐ戻る）
+func punch(strength: float) -> void:
+	_punch = maxf(_punch, clampf(strength, 0.0, 1.0))
 
 
 # ---- 開発用のカメラ ----

@@ -37,6 +37,7 @@ func test_pause_stops_every_phase_and_steps_one_tick() -> void:
 	var main: Node = _main()
 	await _frame()
 	check(not main.can_dev_pause(), "試合がないときは止められない")
+	main.cinematics = false  # 試合の始まりの演出（FIGHT! まで止める）で、再開の確かめがずれないようにする
 	main.start_game(55)
 	await _frame()
 	main.session.finish_draft()

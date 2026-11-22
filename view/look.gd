@@ -200,6 +200,88 @@ const SHAKE_DAMAGE: float = 8.0
 const SHAKE_AMOUNT: float = 0.35
 const SHAKE_DECAY: float = 6.0
 
+# ---- 機体の身ぶり（view/arena/motion_fx_view.gd） ----
+## 加速・ブレーキで前後に傾く量（ラジアン / (m/秒²)）といちばん大きい傾き、曲がって外へ傾く量（ラジアン / (ラジアン/秒 × m/秒)）
+const MOTION_PITCH_PER_ACCEL: float = 0.012
+const MOTION_PITCH_MAX: float = 0.2
+const MOTION_ROLL_PER_TURN: float = 0.025
+const MOTION_ROLL_MAX: float = 0.18
+## 傾きのなめらかさ（大きいほどすぐ傾く）
+const MOTION_SMOOTH: float = 8.0
+## 走っているときの上下の揺れ：速さ（1秒あたり）と大きさ（m）。脚のある機体は大きく揺れる
+const MOTION_BOB_HZ: float = 9.0
+const MOTION_BOB_AMP: float = 0.03
+const MOTION_BOB_LEGS: float = 0.09
+## 車輪の回る量（ラジアン / m）、脚の振れる角度（ラジアン）と一歩の長さ（m）
+const WHEEL_SPIN_PER_M: float = 3.2
+const LEG_SWING: float = 0.45
+const LEG_STRIDE_M: float = 1.6
+## 土ぼこり：この速さ（m/秒）より速いと出す。数と色
+const DUST_SPEED: float = 2.5
+const DUST_AMOUNT: int = 36
+const DUST_COLOR := Color(0.42, 0.37, 0.3)
+const EXHAUST_COLOR := Color(0.16, 0.15, 0.14)
+## ライト：色・明るさ・届く距離・広がる角度（度）・下へ向ける量・高さ（車体の高さの割合）・レンズの半径
+const HEADLIGHT_COLOR := Color(1.0, 0.9, 0.68)
+const HEADLIGHT_ENERGY: float = 2.5
+const HEADLIGHT_RANGE: float = 8.0
+const HEADLIGHT_ANGLE_DEG: float = 32.0
+const HEADLIGHT_TILT: float = 0.3
+const HEADLIGHT_HEIGHT: float = 0.55
+const HEADLIGHT_LENS: float = 0.07
+## 傷んだときの煙：HPの割合がこれを切ると灰色の煙、さらに切ると黒煙と火花
+const DAMAGE_SMOKE_HALF: float = 0.5
+const DAMAGE_SMOKE_LOW: float = 0.25
+const DAMAGE_SMOKE_GRAY := Color(0.4, 0.4, 0.4)
+const DAMAGE_SMOKE_BLACK := Color(0.05, 0.05, 0.05)
+
+# ---- 試合の演出（view/arena/battle_director.gd） ----
+## カメラの画角（ふだん）
+const CAMERA_FOV: float = 55.0
+## 強い一撃でカメラを押し込む：近づく割合・画角を狭める度数・揺れの強さ・戻る速さ（1秒あたり）
+const PUNCH_ZOOM: float = 0.12
+const PUNCH_FOV: float = 7.0
+const PUNCH_SHAKE: float = 0.25
+const PUNCH_DECAY: float = 4.0
+## 決着で負けた機体へ寄るカメラ：いちばん近づく割合と、移る速さ（1秒あたり）
+const CINE_ZOOM_MAX: float = 0.5
+const CINE_CAMERA_SPEED: float = 1.6
+## 試合の始まり：名札が入る秒数、READY が出る時刻、FIGHT! が出る時刻、試合が動き出す時刻、全部が消える時刻
+const INTRO_SLIDE_SEC: float = 0.35
+## 画面ができたとき、試合がこの秒数より進んでいなければ始まりの演出を出す
+const INTRO_MAX_START_SEC: float = 0.5
+const INTRO_READY_AT: float = 0.95
+const INTRO_FIGHT_AT: float = 1.55
+const INTRO_GO_AT: float = 1.6
+const INTRO_END_AT: float = 2.3
+## ヒットストップ：小さい一撃・大きい一撃とみなすダメージ、止める秒数（実時間）、止めている間の時間の倍率
+const HITSTOP_DAMAGE: float = 7.0
+const HITSTOP_BIG_DAMAGE: float = 12.0
+const HITSTOP_SEC: float = 0.055
+const HITSTOP_BIG_SEC: float = 0.11
+const HITSTOP_SCALE: float = 0.04
+## ダメージの数字：続けて受けたダメージをまとめる秒数、浮かぶ秒数・高さ（画面の点）、大きい数字とみなす量
+const DMG_POOL_SEC: float = 0.3
+const DMG_POP_SEC: float = 0.9
+const DMG_RISE: float = 46.0
+const DMG_BIG: float = 12.0
+const DMG_COLOR := Color(1.0, 0.86, 0.35)
+const DMG_BIG_COLOR := Color(1.0, 0.36, 0.2)
+const HEAL_NUMBER_COLOR := Color(0.45, 1.0, 0.55)
+## 掛け声（BACKSTAB! など）：出ている秒数、同じ機体で次を出すまでの秒数、色
+const CALLOUT_SEC: float = 1.0
+const CALLOUT_GAP_SEC: float = 0.6
+const CALLOUT_COLOR := Color(1.0, 0.78, 0.25)
+const CALLOUT_HOT := Color(1.0, 0.35, 0.18)
+const CALLOUT_COOL := Color(0.45, 0.9, 1.0)
+## 決着：ゆっくりにする倍率と秒数（実時間）、上下の黒帯の太さ（画面の高さの割合）、看板を出す時刻
+const KO_SLOWMO_SCALE: float = 0.18
+const KO_SLOWMO_SEC: float = 1.5
+const KO_BAR: float = 0.11
+const KO_BANNER_AT: float = 0.15
+## 白く光る画面の濃さ
+const FLASH_ALPHA: float = 0.75
+
 # ---- 撃つ武器の弾（view/arena/shot_fx.gd） ----
 ## 弾の高さ（床から）
 const SHOT_HEIGHT: float = 0.9

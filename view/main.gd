@@ -32,6 +32,10 @@ var _server_pid: int = -1
 var screen: Control = null
 ## バトルを進める速さ（画面の「4倍」ボタン）
 var battle_speed: float = 1.0
+## 演出の時間の倍率（試合の始まりで止める、強い一撃で一瞬止める、決着でゆっくりにする）。battle_director.gd が決める。
+## 通信対戦では進めるのがサーバーなので使わない。cinematics を false にすると演出で時間を変えない（テスト用）
+var cinematic_scale: float = 1.0
+var cinematics: bool = true
 ## 本番の頭脳（LLM）を使うか。テストでは画面に追加する前に false にする
 var use_llm: bool = true
 ## 頭脳とCPUの判断。本番の頭脳のサーバーは起動時に1回だけ立ち上げ、試合をまたいで使い回す
@@ -251,6 +255,7 @@ func start_game(seed_value: int = 0) -> void:
 		setup.append({"name": "CPU%d" % i, "is_human": false})
 	session = MatchSession.new(data, seed_value, setup, agents)
 	battle_speed = 1.0
+	cinematic_scale = 1.0
 	set_dev_paused(false)
 	_shown_phase = ""
 	_sync_screen()
@@ -289,6 +294,8 @@ func _process(delta: float) -> void:
 		elif session.phase == MatchSession.PHASE_LOOT:
 			session.finish_loot()
 	var speed: float = battle_speed if session.phase == MatchSession.PHASE_BATTLE else 1.0
+	if session.phase == MatchSession.PHASE_BATTLE and cinematics and not session.is_online():
+		speed *= cinematic_scale
 	session.update(delta * speed)
 	_sync_screen()
 
@@ -309,6 +316,7 @@ func _sync_screen() -> void:
 
 
 func _show(next: Control) -> void:
+	cinematic_scale = 1.0  # 画面が変わったら、演出の時間の倍率はもとに戻す
 	if screen != null:
 		screen.queue_free()
 	screen = next

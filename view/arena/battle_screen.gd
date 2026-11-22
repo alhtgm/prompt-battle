@@ -7,6 +7,7 @@ const UiText := preload("res://view/ui_text.gd")
 const ArenaView := preload("res://view/arena/arena_view.gd")
 const Look := preload("res://view/look.gd")
 const PostOverlay := preload("res://view/post_overlay.gd")
+const BattleDirector := preload("res://view/arena/battle_director.gd")
 
 const LOG_LINES: int = 6
 ## 頭上の文字どうしの最小のすき間（ピクセル）
@@ -29,6 +30,8 @@ var log_label: Label
 var others_label: Label
 ## 機体の頭上に重ねる名前と一言
 var bubbles: Array[Label] = []
+## 試合の演出（VS・FIGHT!・ヒットストップ・ダメージの数字・K.O.!）
+var director: Control
 ## 開発用：本番の頭脳の問い合わせの記録（F2 で開け閉め。F3 で渡している指示文に切り替え。F4 で見る機体を切り替え）
 ## 開発用のカメラの早見（開発用の実行のときだけ出す）と、ドラッグ中のマウスのボタン（なければ 0）
 var dev_camera_hint: Label = null
@@ -70,6 +73,9 @@ func build_ui() -> void:
 		b.add_theme_constant_override("outline_size", 6)
 		b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		bubbles.append(b)
+	director = BattleDirector.new()
+	add_child(director)
+	director.setup(main, arena, watched_battle.sim if watched_battle != null else null, SIDE_COLORS)
 
 	# 上：見出しと操作
 	var top: VBoxContainer = _panel(Control.PRESET_CENTER_TOP, Vector2(0, 12), false)
@@ -252,6 +258,7 @@ func _fill_prompts() -> void:
 func _process(delta: float) -> void:
 	if main != null and main.session != null and main.session.phase == "battle":
 		arena.paused = main.dev_paused
+		director.update(delta)
 		_dev_camera_keys(delta)
 		refresh()
 		_place_bubbles()

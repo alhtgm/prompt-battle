@@ -14,6 +14,7 @@ const HookView := preload("res://view/arena/hook_view.gd")
 const HealFxView := preload("res://view/arena/heal_fx_view.gd")
 const FlameView := preload("res://view/arena/flame_view.gd")
 const BurnFxView := preload("res://view/arena/burn_fx_view.gd")
+const MotionFxView := preload("res://view/arena/motion_fx_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
@@ -41,6 +42,8 @@ var heal_fx: Node3D
 ## 火炎放射器の炎（持っていなければ null）と、火傷で燃えている見た目
 var flame_view: Node3D = null
 var burn_fx: Node3D
+## 身ぶり（傾き・揺れ・土ぼこり・ライト・傷んだ煙・車輪と脚）
+var motion: Node3D
 var _flame_index: int = -1
 var weapon_tips: Array[Vector3] = []
 var _radius: float = 0.9
@@ -153,6 +156,14 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 	burn_fx = BurnFxView.new()
 	add_child(burn_fx)
 	burn_fx.setup(robot_radius, top)
+	# 身ぶり（武器やスキルを付けたあとに作る。車輪と脚の節を探すため）
+	motion = MotionFxView.new()
+	add_child(motion)
+	# ライトはモデルの lamp_* の目印に置く（目印のないモデルはレンズを出さず、照らす光だけ。箱の車体は前の面）
+	var lamps: Array = []
+	for t: Transform3D in dims.get("lamp_mounts", []):
+		lamps.append(t.origin)
+	motion.setup(body, length, width, top, lamps, not dims["model"])
 	# シールド以外の効果が続くスキル（ブースターの噴射炎、オーバークロックの赤い火花）
 	skill_fx = SkillFxView.new()
 	add_child(skill_fx)
@@ -184,7 +195,11 @@ func sync(r: Variant, delta: float) -> void:
 	var flipped: bool = bool(r.get("flipped")) if "flipped" in r else r.stun > 0.0
 	var target_roll: float = PI if flipped and r.stun > 0.0 else 0.0
 	_roll = move_toward(_roll, target_roll, FLIP_SPEED * delta)
-	body.rotation.x = _roll
+	# 身ぶり：加速・ブレーキ・曲がりで傾き、走ると揺れる（裏返っている間や壊れたあとは動かさない）
+	var moving: bool = not r.fell and r.hp > 0.0 and not flipped
+	motion.update(r, moving, delta)
+	body.rotation = Vector3(_roll + motion.roll, 0.0, motion.pitch)
+	body.position.y = motion.bob
 	# 穴に落ちたら沈んで小さくなる
 	if r.fell:
 		if fall_burst == null:
@@ -347,14 +362,15 @@ func _add_frame_model(fdef: GameData.PartDef, robot_radius: float, color: Color)
 	holder.add_child(model)
 	body.add_child(holder)
 	PartModels.roughen(model, color)
-	var mounts: Dictionary = {PartModels.MOUNT_WEAPON: [], PartModels.MOUNT_SKILL: []}
+	var mounts: Dictionary = {PartModels.MOUNT_WEAPON: [], PartModels.MOUNT_SKILL: [], PartModels.MOUNT_LAMP: []}
 	for prefix: String in mounts:
 		for t: Transform3D in PartModels.mounts(model, prefix):
 			var m: Transform3D = holder.transform * t
 			m.basis = m.basis.orthonormalized()  # 付けるパーツはフレームの倍率で伸ばさない
 			mounts[prefix].append(m)
 	return {"model": true, "length": box.size.x * s, "width": box.size.z * s, "top": box.size.y * s,
-		"weapon_mounts": mounts[PartModels.MOUNT_WEAPON], "skill_mounts": mounts[PartModels.MOUNT_SKILL]}
+		"weapon_mounts": mounts[PartModels.MOUNT_WEAPON], "skill_mounts": mounts[PartModels.MOUNT_SKILL],
+		"lamp_mounts": mounts[PartModels.MOUNT_LAMP]}
 
 
 ## 仮の車体（くすんだ鉄板の箱と、下の黒いタイヤ）。重いフレームほど背が高い

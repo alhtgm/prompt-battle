@@ -165,6 +165,74 @@ static func flame_ignite() -> AudioStreamWAV:
 	return s
 
 
+## 文字が叩きつけられる音（VS・掛け声）：低い「ドン」に、短いノイズの「バシッ」を重ねる
+static func slam() -> AudioStreamWAV:
+	if _cache.has("slam"):
+		return _cache["slam"]
+	var n: int = int(RATE * 0.35)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var phase: float = 0.0
+	for k: int in n:
+		var t: float = float(k) / RATE
+		phase += TAU * lerpf(140.0, 45.0, minf(1.0, t / 0.2)) / RATE  # 下がっていく低い音
+		var v: float = sin(phase) * exp(-t * 9.0) * 0.9
+		v += _noise(k) * exp(-t * 45.0) * 0.6
+		buf[k] = clampf(v * Look.SFX_VOLUME, -1.0, 1.0)
+	var s: AudioStreamWAV = _wav(buf, false)
+	_cache["slam"] = s
+	return s
+
+
+## 試合開始の合図（FIGHT!）：金管のような和音を強く鳴らし、低い打撃と金属の響きを重ねる
+static func fight_stab() -> AudioStreamWAV:
+	if _cache.has("fight_stab"):
+		return _cache["fight_stab"]
+	var n: int = int(RATE * 1.1)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var chord: Array[float] = [110.0, 164.8, 220.0, 277.2, 329.6]
+	for k: int in n:
+		var t: float = float(k) / RATE
+		var env: float = minf(1.0, t / 0.01) * exp(-t * 2.6)
+		var v: float = 0.0
+		for f: float in chord:
+			# のこぎり波に近い、倍音の多い音（5つの倍音を足す）
+			for h: int in range(1, 6):
+				v += sin(TAU * f * h * t) / float(h) * 0.09
+		v *= env
+		v += sin(TAU * 55.0 * t) * exp(-t * 7.0) * 0.6
+		v += _noise(k) * exp(-t * 30.0) * 0.35
+		v += sin(TAU * 1870.0 * t) * sin(TAU * 2410.0 * t) * exp(-t * 5.0) * 0.12
+		buf[k] = clampf(v * Look.SFX_VOLUME, -1.0, 1.0)
+	var s: AudioStreamWAV = _wav(buf, false)
+	_cache["fight_stab"] = s
+	return s
+
+
+## 決着の音（K.O.!）：お腹に響く低い爆音と、長く残るゴロゴロという余韻
+static func ko_boom() -> AudioStreamWAV:
+	if _cache.has("ko_boom"):
+		return _cache["ko_boom"]
+	var n: int = int(RATE * 2.0)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var phase: float = 0.0
+	var rumble: float = 0.0
+	for k: int in n:
+		var t: float = float(k) / RATE
+		phase += TAU * lerpf(90.0, 28.0, minf(1.0, t / 0.6)) / RATE
+		var v: float = sin(phase) * exp(-t * 2.2) * 1.0
+		# 低くこもったゴロゴロ：ノイズをなめらかにして重ねる
+		rumble = lerpf(rumble, _noise(k), 0.05)
+		v += rumble * exp(-t * 1.5) * 1.6
+		v += _noise(k * 3 + 7) * exp(-t * 20.0) * 0.5
+		buf[k] = clampf(v * Look.SFX_VOLUME, -1.0, 1.0)
+	var s: AudioStreamWAV = _wav(buf, false)
+	_cache["ko_boom"] = s
+	return s
+
+
 ## -1〜1 の決まったノイズ（同じ番号なら同じ値）
 static func _noise(i: int) -> float:
 	var v: float = sin(float(i) * 12.9898 + 78.233) * 43758.5453
