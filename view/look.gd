@@ -112,6 +112,17 @@ const HEAL_COLOR := Color(0.25, 1.0, 0.35)
 const HEAL_FX_SEC: float = 1.3
 const HEAL_LIGHT: float = 3.0
 
+# ---- 火炎放射器（view/arena/flame_view.gd）と火傷で燃えている機体（view/arena/burn_fx_view.gd） ----
+const FLAME_ORANGE := Color(1.0, 0.45, 0.1)
+const FLAME_RED := Color(0.85, 0.08, 0.03)
+## 黒い煙と、種火の青い根元
+const FLAME_SMOKE := Color(0.05, 0.045, 0.04)
+const FLAME_PILOT_BLUE := Color(0.3, 0.5, 1.0)
+## 炎が照らす赤い光の強さと、銃口から光までの距離（m）、燃えている機体の光の強さ
+const FLAME_LIGHT: float = 4.0
+const FLAME_LIGHT_AHEAD: float = 2.5
+const BURN_LIGHT: float = 2.2
+
 # ---- ハープーンガン（view/arena/hook_view.gd）と効果音（view/sfx.gd） ----
 const HOOK_CHAIN_COLOR := Color(0.42, 0.41, 0.4)
 const HOOK_HEAD_COLOR := Color(0.5, 0.48, 0.45)

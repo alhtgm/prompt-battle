@@ -12,6 +12,8 @@ const SkillFxView := preload("res://view/arena/skill_fx_view.gd")
 const FallBurstView := preload("res://view/arena/fall_burst_view.gd")
 const HookView := preload("res://view/arena/hook_view.gd")
 const HealFxView := preload("res://view/arena/heal_fx_view.gd")
+const FlameView := preload("res://view/arena/flame_view.gd")
+const BurnFxView := preload("res://view/arena/burn_fx_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
@@ -36,6 +38,10 @@ var _glow: Color = Color.WHITE
 var hook_view: Node3D = null
 ## 回復パックを取ったときの緑の演出
 var heal_fx: Node3D
+## 火炎放射器の炎（持っていなければ null）と、火傷で燃えている見た目
+var flame_view: Node3D = null
+var burn_fx: Node3D
+var _flame_index: int = -1
 var weapon_tips: Array[Vector3] = []
 var _radius: float = 0.9
 ## 自爆装置の赤い点滅の重ね塗り（点滅していなければ null）と、今点いているか
@@ -91,8 +97,8 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 	var n: int = build.weapons.size()
 	for i: int in n:
 		var wdef: GameData.PartDef = data.get_part(build.weapons[i].def_id)
-		# ハープーンガンも、撃つ武器と同じく長い銃身として上に載せる
-		var shoot: bool = wdef.behavior == "shoot" or wdef.behavior == "hook"
+		# ハープーンガンと火炎放射器も、撃つ武器と同じく長い銃身として上に載せる
+		var shoot: bool = wdef.behavior == "shoot" or wdef.behavior == "hook" or wdef.behavior == "flame"
 		var side: float = (float(i) - (n - 1) * 0.5) * (width / maxf(1.0, n)) * 0.9
 		var mount: Transform3D
 		if i < weapon_mounts.size():
@@ -133,11 +139,20 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 			add_child(hook_view)
 			hook_view.top_level = true
 			hook_view.setup()
+		if data.get_part(w.def_id).behavior == "flame" and flame_view == null:
+			flame_view = FlameView.new()
+			add_child(flame_view)
+			flame_view.setup(data.get_part(w.def_id).get_fixed("range"))
+			_flame_index = build.weapons.find(w)
 	_radius = robot_radius
 	# 回復パックを取ったとき、機体を緑に光らせる演出
 	heal_fx = HealFxView.new()
 	add_child(heal_fx)
 	heal_fx.setup(body, robot_radius, top)
+	# 火傷で燃えている見た目
+	burn_fx = BurnFxView.new()
+	add_child(burn_fx)
+	burn_fx.setup(robot_radius, top)
 	# シールド以外の効果が続くスキル（ブースターの噴射炎、オーバークロックの赤い火花）
 	skill_fx = SkillFxView.new()
 	add_child(skill_fx)
@@ -219,6 +234,14 @@ func sync(r: Variant, delta: float) -> void:
 	var alive: bool = not r.fell and not destroyed
 	skill_fx.update(booster and alive, overclock and alive, delta)
 	shield.update(shield_left > 0.0 and not r.fell and not destroyed, shield_left, delta)
+	# 火炎放射器の炎（ノズルの先から機体の向きへ）と、火傷で燃えている見た目
+	var down: bool = r.fell or (r.hp <= 0.0 and fuse < 0.0)
+	if flame_view != null and is_inside_tree():
+		var fslot: int = int(r.get("flame_slot")) if "flame_slot" in r else -1
+		var ftip: Vector3 = weapon_tips[fslot] if fslot >= 0 and fslot < weapon_tips.size() else (weapon_tips[_flame_index] if _flame_index >= 0 and _flame_index < weapon_tips.size() else Vector3(_size * 0.5, _top * 0.6, 0))
+		var fon: bool = bool(r.get("flame_on")) if "flame_on" in r else false
+		flame_view.update(fon and not down, body.to_global(ftip), global_basis.x, not down, delta)
+	burn_fx.update((float(r.get("burn_t")) if "burn_t" in r else 0.0) > 0.0 and not down, delta)
 	# 回復の緑の演出（自爆装置の点滅中や爆発したあとは、体を緑に塗らない）
 	heal_fx.update(delta, blink_mat == null and explosion == null)
 	# ハープーンガンの鎖と釣り針：銃口から、釣り針（引き寄せている間は相手）まで

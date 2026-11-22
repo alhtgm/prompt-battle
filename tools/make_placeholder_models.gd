@@ -48,6 +48,7 @@ func _initialize() -> void:
 	_skill_self_destruct()
 	# 後から足したもの（前のモデルの汚れの模様が変わらないよう、最後に作る）
 	_weapon_harpoon()
+	_weapon_flamethrower()
 	print("書き出したモデル：%d 個（%s）" % [_written, OUT_DIR])
 	quit()
 
@@ -470,3 +471,36 @@ func _weapon_harpoon() -> void:
 			Vector3(rad_to_deg(a), 0, 25))
 	_add(r, _cyl(0.07, 0.0, 0.22, 6), Vector3(1.9, 0.02, 0), hot, Vector3(0, 0, -90))
 	_save(r, "weapon_harpoon")
+
+
+## 火炎放射器：本物の作りにならう。後ろに燃料タンク2本（くすんだ緑に黄色い帯）と、その間の赤い圧力タンク、
+## タンクからホースで銃身へ。銃身には放熱の輪、先は少し広がったノズルで、下に点火器（青い種火の光）
+func _weapon_flamethrower() -> void:
+	var r: Node3D = _new("weapon_flamethrower")
+	var tank: StandardMaterial3D = _mat(OLIVE, 0.5, 0.65)
+	var band: StandardMaterial3D = _mat(YELLOW, 0.4, 0.6)
+	var steel: StandardMaterial3D = _mat(DARK, 0.85, 0.5)
+	var hose: StandardMaterial3D = _mat(RUBBER, 0.0, 0.95)
+	# 燃料タンク2本（寝かせて前後向き）と、黄色い帯
+	for z: float in [-0.13, 0.13]:
+		_add(r, _cyl(0.11, 0.11, 0.55, 10), Vector3(0.3, 0.0, z), tank, Vector3(0, 0, -90))
+		_add(r, _sphere(0.11, 8), Vector3(0.03, 0.0, z), tank)
+		_add(r, _sphere(0.11, 8), Vector3(0.57, 0.0, z), tank)
+		for x: float in [0.18, 0.42]:
+			_add(r, _cyl(0.115, 0.115, 0.04, 10), Vector3(x, 0.0, z), band, Vector3(0, 0, -90))
+	# 間の小さな圧力タンク（赤）と、上のバルブ
+	_add(r, _cyl(0.07, 0.07, 0.4, 8), Vector3(0.3, 0.13, 0), _mat(RED, 0.5, 0.6), Vector3(0, 0, -90))
+	_add(r, _cyl(0.025, 0.025, 0.08, 6), Vector3(0.45, 0.22, 0), steel)
+	# ホース：タンクの前から銃身の根元へ
+	for z: float in [-0.13, 0.13]:
+		_add(r, _cyl(0.03, 0.03, 0.22, 6), Vector3(0.7, 0.03, z * 0.6), hose, Vector3(0, z * 120.0, -80))
+	# 銃身と放熱の輪、広がったノズル
+	_add(r, _box(Vector3(0.2, 0.16, 0.18)), Vector3(0.82, 0.04, 0), steel)
+	_add(r, _cyl(0.05, 0.05, 0.75, 8), Vector3(1.28, 0.06, 0), steel, Vector3(0, 0, -90))
+	for x: float in [1.05, 1.15, 1.25, 1.35, 1.45]:
+		_add(r, _cyl(0.08, 0.08, 0.03, 8), Vector3(x, 0.06, 0), _mat(Color(0.35, 0.33, 0.3), 0.8, 0.5), Vector3(0, 0, -90))
+	_add(r, _cyl(0.06, 0.09, 0.12, 8), Vector3(1.7, 0.06, 0), steel, Vector3(0, 0, -90))
+	# ノズルの下の点火器（小さな箱と、青く光る種火の口）
+	_add(r, _box(Vector3(0.12, 0.06, 0.07)), Vector3(1.62, -0.03, 0), _mat(Color(0.5, 0.42, 0.2), 0.7, 0.5))
+	_add(r, _sphere(0.025, 4), Vector3(1.69, -0.03, 0), _mat(DARK, 0.0, 1.0, Color(0.3, 0.5, 1.0)))
+	_save(r, "weapon_flamethrower")

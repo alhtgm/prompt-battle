@@ -20,6 +20,8 @@ class WeaponSlot:
 	var cd: float = 0.0
 	## 残りの弾。-1 は弾を使わない武器
 	var ammo: int = -1
+	## 火炎放射器の残りの燃料（秒）
+	var fuel: float = 0.0
 
 
 ## スキル1つの状態
@@ -81,6 +83,13 @@ var hook_vx: float = 0.0
 var hook_vz: float = 0.0
 var hook_left: float = 0.0
 var hook_slot: int = -1
+## 火炎放射器：この刻みに炎を出しているか、どの武器から出しているか
+var flame_on: bool = false
+var flame_slot: int = -1
+## 火傷（状態異常）：残り秒数（0 は火傷していない）、1秒あたりのダメージ、火をつけた機体の番号
+var burn_t: float = 0.0
+var burn_dps: float = 0.0
+var burn_by: int = -1
 
 # ---- 考えるための記録 ----
 var last_request_t: float = -INF
@@ -113,6 +122,7 @@ func setup(data: GameData, b: Build, idx: int, robot_name: String, spawn: Dictio
 		ws.inst = w
 		ws.def = data.get_part(w.def_id)
 		ws.ammo = int(ws.def.get_fixed("ammo")) if ws.def.behavior == "shoot" else -1
+		ws.fuel = ws.def.get_fixed("fuel_sec") if ws.def.behavior == "flame" else 0.0
 		weapons.append(ws)
 	for s: PartInstance in b.skills:
 		var ss := SkillSlot.new()
@@ -183,4 +193,5 @@ func to_dict() -> Dictionary:
 		"weapons": ws, "skills": ss,
 		"fuse": fuse, "self_destructed": self_destructed,
 		"hook": [hook_state, hook_x, hook_z, hook_slot],
+		"flame": [flame_on, flame_slot], "burn": [burn_t, burn_dps, burn_by],
 	}

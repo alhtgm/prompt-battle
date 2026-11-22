@@ -74,6 +74,14 @@ func apply_frame(f: Dictionary) -> void:
 		r.fuse = float(d.get("fuse", -1.0))
 		r.fuse_total = float(d.get("fuse_total", 0.0))
 		r.self_destructed = bool(d.get("self_destructed", false))
+		var fl: Array = d.get("flame", [false, -1])
+		if fl.size() >= 2:
+			r.flame_on = bool(fl[0])
+			r.flame_slot = int(fl[1])
+		var bu: Array = d.get("burn", [0.0, -1])
+		if bu.size() >= 2:
+			r.burn_t = float(bu[0])
+			r.burn_by = int(bu[1])
 		var hk: Array = d.get("hook", ["", 0.0, 0.0, -1])
 		if hk.size() >= 4:
 			r.hook_state = str(hk[0])

@@ -309,6 +309,8 @@ func refresh() -> void:
 		var state: String = "穴に落ちた" if r.fell else ("動けない！" if r.stun > 0.0 else UiText.INTENT_LABELS.get(r.intent, r.intent))
 		if float(r.get("fuse")) >= 0.0:
 			state += "　自爆まで %.1f 秒！" % float(r.get("fuse"))
+		if float(r.get("burn_t")) > 0.0:
+			state += "　火傷 %.1f 秒" % float(r.get("burn_t"))
 		side_names[i].text = "%s　HP %d / %d" % [r.name, roundi(r.hp), roundi(r.max_hp)]
 		side_bars[i].max_value = r.max_hp
 		side_bars[i].value = r.hp

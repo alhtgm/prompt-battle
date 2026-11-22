@@ -31,6 +31,8 @@ const BEHAVIORS: Dictionary = {
 		"shoot": {"stats": [], "fixed": ["range", "ammo", "projectile_speed", "spread_deg"]},
 		# 釣り針を撃って、当たった相手を自分の前まで引き寄せる
 		"hook": {"stats": [], "fixed": ["range", "projectile_speed", "pull_speed", "hold_sec"]},
+		# 炎を浴びせ続ける。ダメージは1秒あたり。当たっている間、ときどき相手を火傷（続けてダメージ）にする
+		"flame": {"stats": [], "fixed": ["range", "fuel_sec", "burn_chance", "burn_sec", "burn_dps"]},
 	},
 	KIND_SKILL: {
 		"booster": {"stats": ["speed_mult"], "fixed": ["duration_sec"]},

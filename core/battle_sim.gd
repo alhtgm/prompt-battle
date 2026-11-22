@@ -170,6 +170,7 @@ func step() -> void:
 	for i: int in 2:
 		_hazards(i)  # 6. 回復パックと穴
 	for i: int in 2:
+		_burn(i)  # 6.4 火傷のダメージ
 		_fuse(i)  # 6.5 自爆装置の導火線
 	_update_packs()  # 6.6 取られた回復パックを、時間がたったら別の場所に出す
 	_check_over()  # 7. 決着
@@ -385,7 +386,12 @@ func _knock(r: Robot, nx: float, nz: float, power: float) -> void:
 func _weapons(i: int) -> void:
 	var me: Robot = robots[i]
 	var en: Robot = robots[1 - i]
+	# 火炎放射器の炎は、この刻みに出しているときだけ true にする
+	var was_flaming: bool = me.flame_on
+	me.flame_on = false
+	me.flame_slot = -1
 	if me.fell or en.fell or me.stun > 0.0:
+		_refill_flame(me)
 		return
 	var ex: float = en.x - me.x
 	var ez: float = en.z - me.z
@@ -426,6 +432,23 @@ func _weapons(i: int) -> void:
 					w.cd = def.get_fixed("cooldown_sec")
 					_damage(en.index, dmg * clampf(closing / need, 1.0, 2.0), me.x, me.z, def.name, i, true)
 					_knock(en, nx, nz, kb)
+			"flame":
+				# 前の扇の中に相手がいて燃料があれば炎を浴びせ続ける（ダメージは1秒あたり）。ときどき火傷にする
+				if w.cd <= 0.0 and w.fuel > 0.0 and in_arc and not en.is_down() \
+						and d <= def.get_fixed("range") + en.radius:
+					me.flame_on = true
+					me.flame_slot = me.weapons.find(w)
+					if not was_flaming:
+						events.append({"type": "flame", "robot": i, "weapon": def.name})
+					w.fuel -= dt
+					_damage(en.index, dmg * dt, me.x, me.z, def.name, i, false)
+					_try_burn(i, en, def)
+					if w.fuel <= 0.0:
+						# 燃料切れ：cooldown_sec 秒たつと満タンに戻る
+						w.fuel = 0.0
+						w.cd = def.get_fixed("cooldown_sec")
+				else:
+					_refill_one(w)
 			"hook":
 				# 釣り針は1本ずつ。前の相手が届く距離にいれば撃つ
 				if me.hook_state == Robot.HOOK_NONE and w.cd <= 0.0 and in_arc and not en.is_down() \
@@ -516,6 +539,58 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 		events.append({"type": "hit", "robot": victim_i, "by": attacker_i, "weapon": label,
 			"damage": dmg, "back": back})
 	return dmg
+
+
+# ---- 5.4 火炎放射器と火傷 ----
+
+## 炎に当たっている間、1秒あたり burn_chance の確率で相手を火傷にする。バリア中は火傷にならない。
+## 火傷中にまたかかると、時間が burn_sec に戻る（重ならない）
+func _try_burn(i: int, en: Robot, def: GameData.PartDef) -> void:
+	if en.fell or en.is_down() or en.active_value("shield", "damage_cut", 0.0) > 0.0:
+		return
+	if not rng.chance(def.get_fixed("burn_chance") * dt):
+		return
+	var newly: bool = en.burn_t <= 0.0
+	en.burn_t = def.get_fixed("burn_sec")
+	en.burn_dps = def.get_fixed("burn_dps")
+	en.burn_by = i
+	if newly:
+		en.trigger = "火傷した"
+		en.add_note("火傷")
+		events.append({"type": "burn", "robot": en.index, "by": i})
+
+
+## 火傷のダメージを与え、時間を進める（バリアの軽減は _damage でかかる）
+func _burn(i: int) -> void:
+	var r: Robot = robots[i]
+	if r.burn_t <= 0.0:
+		return
+	if r.fell or r.is_down() or r.self_destructed:
+		r.burn_t = 0.0
+		return
+	var by: int = r.burn_by if r.burn_by >= 0 else 1 - i
+	_damage(i, r.burn_dps * dt, robots[by].x, robots[by].z, "火傷", by, false)
+	r.burn_t = maxf(0.0, r.burn_t - dt)
+	if r.burn_t <= 0.0:
+		events.append({"type": "burn_end", "robot": i})
+
+
+## 撃っていない火炎放射器の燃料を戻す（すべての火炎放射器）
+func _refill_flame(me: Robot) -> void:
+	for w: Robot.WeaponSlot in me.weapons:
+		if w.def.behavior == "flame":
+			_refill_one(w)
+
+
+## 燃料切れなら cooldown_sec 秒たつと満タンに、残っていれば少しずつ（cooldown_sec 秒で満タンになる速さで）戻る
+func _refill_one(w: Robot.WeaponSlot) -> void:
+	if w.cd > 0.0:
+		return
+	var full: float = w.def.get_fixed("fuel_sec")
+	if w.fuel <= 0.0:
+		w.fuel = full
+	else:
+		w.fuel = minf(full, w.fuel + full / maxf(0.01, w.def.get_fixed("cooldown_sec")) * dt)
 
 
 # ---- 5.5 ハープーンガン ----
@@ -612,6 +687,9 @@ func _hazards(i: int) -> void:
 				r.add_note("回復パック%s:+%d" % ["大" if p["big"] else "小", roundi(h)])
 				events.append({"type": "pack", "robot": i, "id": p["id"], "big": p["big"], "heal": h,
 					"x": p["x"], "z": p["z"]})
+				if r.burn_t > 0.0:
+					r.burn_t = 0.0  # 回復パックで火傷も治る
+					events.append({"type": "burn_end", "robot": i})
 				break
 
 	var margin: float = float(_b["pit"]["fall_margin"])
