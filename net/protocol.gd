@@ -118,6 +118,7 @@ static func battle_frame(s: RefCounted, max_log: int) -> Dictionary:
 				"say": r.say, "skills": skills, "ammo": ammo,
 				"fuse": r.fuse, "fuse_total": r.fuse_total, "self_destructed": r.self_destructed,
 				"hook": [r.hook_state, r.hook_x, r.hook_z, r.hook_slot], "flipped": r.flipped,
+				"flame": [r.flame_on, r.flame_slot], "burn": [r.burn_t, r.burn_by],
 			})
 		var shots: Array = []
 		for sh: Variant in sim.shots:

@@ -59,6 +59,9 @@ func test_open_hold_close() -> void:
 	_run(v, true, 0.9, Look.SHIELD_OPEN_SEC * 0.5 + 0.05)
 	check_eq(v.state, ShieldView.State.ON, "展開が終わると張った状態")
 	check(is_equal_approx(float(_param(v, "open")), 1.0), "張った状態では全部見える")
+	var ds: Vector3 = v.dome.scale
+	check(is_equal_approx(ds.x, ds.y) and is_equal_approx(ds.y, ds.z), "膜はつぶれていない丸い球")
+	check(v.streaks.emitting, "張っている間は中を光の筋が飛び交う")
 	check(is_equal_approx(float(_param(v, "flicker")), 0.0), "残り時間が多いときはちらつかない")
 	_run(v, true, Look.SHIELD_LOW_FRAC * 0.3, DT)
 	check(float(_param(v, "flicker")) > 0.5, "残り時間が少ないとちらつく")
@@ -74,10 +77,11 @@ func test_open_hold_close() -> void:
 	check_eq(v.state, ShieldView.State.CLOSING, "効果が切れると消滅が始まる")
 	_run(v, false, 0.0, Look.SHIELD_CLOSE_SEC * 0.5)
 	var dis: float = _param(v, "dissolve")
-	check(dis > 0.0 and dis < 1.0, "消滅の途中はセルが少しずつ消える（%.2f）" % dis)
+	check(dis > 0.0 and dis < 1.0, "消滅の途中は膜が少しずつ焼け切れて消える（%.2f）" % dis)
 	_run(v, false, 0.0, Look.SHIELD_CLOSE_SEC)
 	check_eq(v.state, ShieldView.State.OFF, "消滅が終わると張っていない状態に戻る")
 	check(not v.dome.visible, "消えたら膜は見えない")
+	check(not v.streaks.emitting, "消えたら光の筋も止まる")
 	check(is_equal_approx(v.light.light_energy, 0.0), "消えたら照り返しの光も消える")
 	# 張っていないときの被弾は何も起こさない
 	v.hit(v.global_position + Vector3(5, 0, 0))

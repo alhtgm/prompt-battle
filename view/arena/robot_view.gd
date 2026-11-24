@@ -12,6 +12,9 @@ const SkillFxView := preload("res://view/arena/skill_fx_view.gd")
 const FallBurstView := preload("res://view/arena/fall_burst_view.gd")
 const HookView := preload("res://view/arena/hook_view.gd")
 const HealFxView := preload("res://view/arena/heal_fx_view.gd")
+const FlameView := preload("res://view/arena/flame_view.gd")
+const BurnFxView := preload("res://view/arena/burn_fx_view.gd")
+const MotionFxView := preload("res://view/arena/motion_fx_view.gd")
 
 ## 武器とスキルの目印の色（動き方ごと）
 const WEAPON_COLORS: Dictionary = {
@@ -36,6 +39,12 @@ var _glow: Color = Color.WHITE
 var hook_view: Node3D = null
 ## 回復パックを取ったときの緑の演出
 var heal_fx: Node3D
+## 火炎放射器の炎（持っていなければ null）と、火傷で燃えている見た目
+var flame_view: Node3D = null
+var burn_fx: Node3D
+## 身ぶり（傾き・揺れ・土ぼこり・ライト・傷んだ煙・車輪と脚）
+var motion: Node3D
+var _flame_index: int = -1
 var weapon_tips: Array[Vector3] = []
 var _radius: float = 0.9
 ## 自爆装置の赤い点滅の重ね塗り（点滅していなければ null）と、今点いているか
@@ -91,8 +100,8 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 	var n: int = build.weapons.size()
 	for i: int in n:
 		var wdef: GameData.PartDef = data.get_part(build.weapons[i].def_id)
-		# ハープーンガンも、撃つ武器と同じく長い銃身として上に載せる
-		var shoot: bool = wdef.behavior == "shoot" or wdef.behavior == "hook"
+		# ハープーンガンと火炎放射器も、撃つ武器と同じく長い銃身として上に載せる
+		var shoot: bool = wdef.behavior == "shoot" or wdef.behavior == "hook" or wdef.behavior == "flame"
 		var side: float = (float(i) - (n - 1) * 0.5) * (width / maxf(1.0, n)) * 0.9
 		var mount: Transform3D
 		if i < weapon_mounts.size():
@@ -133,11 +142,28 @@ func setup(data: GameData, build: Variant, robot_radius: float, color: Color, gl
 			add_child(hook_view)
 			hook_view.top_level = true
 			hook_view.setup()
+		if data.get_part(w.def_id).behavior == "flame" and flame_view == null:
+			flame_view = FlameView.new()
+			add_child(flame_view)
+			flame_view.setup(data.get_part(w.def_id).get_fixed("range"))
+			_flame_index = build.weapons.find(w)
 	_radius = robot_radius
 	# 回復パックを取ったとき、機体を緑に光らせる演出
 	heal_fx = HealFxView.new()
 	add_child(heal_fx)
 	heal_fx.setup(body, robot_radius, top)
+	# 火傷で燃えている見た目
+	burn_fx = BurnFxView.new()
+	add_child(burn_fx)
+	burn_fx.setup(robot_radius, top)
+	# 身ぶり（武器やスキルを付けたあとに作る。車輪と脚の節を探すため）
+	motion = MotionFxView.new()
+	add_child(motion)
+	# ライトはモデルの lamp_* の目印に置く（目印のないモデルはレンズを出さず、照らす光だけ。箱の車体は前の面）
+	var lamps: Array = []
+	for t: Transform3D in dims.get("lamp_mounts", []):
+		lamps.append(t.origin)
+	motion.setup(body, length, width, top, lamps, not dims["model"])
 	# シールド以外の効果が続くスキル（ブースターの噴射炎、オーバークロックの赤い火花）
 	skill_fx = SkillFxView.new()
 	add_child(skill_fx)
@@ -169,7 +195,11 @@ func sync(r: Variant, delta: float) -> void:
 	var flipped: bool = bool(r.get("flipped")) if "flipped" in r else r.stun > 0.0
 	var target_roll: float = PI if flipped and r.stun > 0.0 else 0.0
 	_roll = move_toward(_roll, target_roll, FLIP_SPEED * delta)
-	body.rotation.x = _roll
+	# 身ぶり：加速・ブレーキ・曲がりで傾き、走ると揺れる（裏返っている間や壊れたあとは動かさない）
+	var moving: bool = not r.fell and r.hp > 0.0 and not flipped
+	motion.update(r, moving, delta)
+	body.rotation = Vector3(_roll + motion.roll, 0.0, motion.pitch)
+	body.position.y = motion.bob
 	# 穴に落ちたら沈んで小さくなる
 	if r.fell:
 		if fall_burst == null:
@@ -219,6 +249,14 @@ func sync(r: Variant, delta: float) -> void:
 	var alive: bool = not r.fell and not destroyed
 	skill_fx.update(booster and alive, overclock and alive, delta)
 	shield.update(shield_left > 0.0 and not r.fell and not destroyed, shield_left, delta)
+	# 火炎放射器の炎（ノズルの先から機体の向きへ）と、火傷で燃えている見た目
+	var down: bool = r.fell or (r.hp <= 0.0 and fuse < 0.0)
+	if flame_view != null and is_inside_tree():
+		var fslot: int = int(r.get("flame_slot")) if "flame_slot" in r else -1
+		var ftip: Vector3 = weapon_tips[fslot] if fslot >= 0 and fslot < weapon_tips.size() else (weapon_tips[_flame_index] if _flame_index >= 0 and _flame_index < weapon_tips.size() else Vector3(_size * 0.5, _top * 0.6, 0))
+		var fon: bool = bool(r.get("flame_on")) if "flame_on" in r else false
+		flame_view.update(fon and not down, body.to_global(ftip), global_basis.x, not down, delta)
+	burn_fx.update((float(r.get("burn_t")) if "burn_t" in r else 0.0) > 0.0 and not down, delta)
 	# 回復の緑の演出（自爆装置の点滅中や爆発したあとは、体を緑に塗らない）
 	heal_fx.update(delta, blink_mat == null and explosion == null)
 	# ハープーンガンの鎖と釣り針：銃口から、釣り針（引き寄せている間は相手）まで
@@ -324,14 +362,15 @@ func _add_frame_model(fdef: GameData.PartDef, robot_radius: float, color: Color)
 	holder.add_child(model)
 	body.add_child(holder)
 	PartModels.roughen(model, color)
-	var mounts: Dictionary = {PartModels.MOUNT_WEAPON: [], PartModels.MOUNT_SKILL: []}
+	var mounts: Dictionary = {PartModels.MOUNT_WEAPON: [], PartModels.MOUNT_SKILL: [], PartModels.MOUNT_LAMP: []}
 	for prefix: String in mounts:
 		for t: Transform3D in PartModels.mounts(model, prefix):
 			var m: Transform3D = holder.transform * t
 			m.basis = m.basis.orthonormalized()  # 付けるパーツはフレームの倍率で伸ばさない
 			mounts[prefix].append(m)
 	return {"model": true, "length": box.size.x * s, "width": box.size.z * s, "top": box.size.y * s,
-		"weapon_mounts": mounts[PartModels.MOUNT_WEAPON], "skill_mounts": mounts[PartModels.MOUNT_SKILL]}
+		"weapon_mounts": mounts[PartModels.MOUNT_WEAPON], "skill_mounts": mounts[PartModels.MOUNT_SKILL],
+		"lamp_mounts": mounts[PartModels.MOUNT_LAMP]}
 
 
 ## 仮の車体（くすんだ鉄板の箱と、下の黒いタイヤ）。重いフレームほど背が高い

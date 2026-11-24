@@ -4,10 +4,11 @@
     "stats": "基準値（数値1つ。rules.json の parts.stat_spread で上下に振れる）か {\"min\": x, \"max\": y} で書く",
     "frame": "stats: hp（HP）, speed_penalty（移動速度の低下。0.1 なら10%遅い） / fixed: mass（重さ。押し合いの強さ）, turn_rate_deg（1秒に曲がれる角度）",
     "weapon": "stats: damage（ダメージ。grind は毎秒）, knockback（吹き飛ばし） / fixed: cooldown_sec（次に使えるまで）, arc_deg（前方の当たる角度の幅）, reach（接触から届く距離）, range（射程）, ammo（弾数）など",
-    "weapon.behavior": "grind=触れている間削る / strike=叩く / lift=ひっくり返す / ram=体当たり / shoot=弾を撃つ / hook=釣り針を撃って相手を引き寄せる",
+    "weapon.behavior": "grind=触れている間削る / strike=叩く / lift=ひっくり返す / ram=体当たり / shoot=弾を撃つ / hook=釣り針を撃って相手を引き寄せる / flame=炎を浴びせ続け、火傷にする",
     "skill.behavior": "booster=一定時間速くなる / shield=一定時間被ダメージ減 / repair=HP回復 / shockwave=近くの相手を吹き飛ばす / emp=近くの相手を動けなくする / overclock=一定時間与ダメージ増 / self_destruct=HPが0になると自動で突っ込んで自爆する",
     "skill.fixed": "cooldown_sec（再使用まで）, duration_sec（効果時間）, range（届く距離）, charges（使える回数。0は無制限）",
     "weapon.hook": "ハープーンガン：前の相手（range 以内）に projectile_speed で釣り針を撃ち、当たれば damage を与えて pull_speed で自分の前まで引き寄せる。引き寄せられた相手は hold_sec 秒動けない",
+    "weapon.flame": "火炎放射器：前の扇（arc_deg）の range 以内にいる相手に炎を浴びせ、1秒あたり damage を与える。燃料は fuel_sec 秒分で、使い切ると cooldown_sec 秒で満タンに戻る（撃っていない間も少しずつ戻る）。炎に当たっている間、1秒あたり burn_chance の確率で相手を火傷にする。火傷は burn_sec 秒、1秒あたり burn_dps のダメージ。火傷中にまたかかると時間が戻る（重ならない）。バリア中は火傷にならず、回復パックを取ると火傷が治る",
     "skill.self_destruct": "自爆装置：使わなくても、HPが0になると自動で動く。fuse_sec 秒のあいだ speed_mult 倍の速さで相手に突っ込み（ダメージは受けない）、そのあと自爆して range 以内の相手に blast_damage のダメージと knockback の吹き飛ばし。自爆で相手を壊せば引き分け",
     "model": "見た目のモデル（.glb）の場所。ファイルがなければ仮の箱で描く。作り方と置き方は docs/models.md"
   },
@@ -67,6 +68,10 @@
       "stats": { "damage": 6, "knockback": 0 },
       "fixed": { "cooldown_sec": 6, "arc_deg": 18, "range": 13, "projectile_speed": 30, "pull_speed": 16, "hold_sec": 0.9 },
       "model": "res://assets/models/parts/weapon_harpoon.glb" },
+    { "id": "weapon_flamethrower", "name": "火炎放射器", "kind": "weapon", "behavior": "flame",
+      "stats": { "damage": 8, "knockback": 0 },
+      "fixed": { "cooldown_sec": 3, "arc_deg": 30, "range": 6, "fuel_sec": 3, "burn_chance": 0.3, "burn_sec": 4, "burn_dps": 6 },
+      "model": "res://assets/models/parts/weapon_flamethrower.glb" },
 
     { "id": "skill_booster",   "name": "ブースター",       "kind": "skill", "behavior": "booster",
       "stats": { "speed_mult": 2.0 },  "fixed": { "cooldown_sec": 5, "duration_sec": 1.0, "charges": 0 },

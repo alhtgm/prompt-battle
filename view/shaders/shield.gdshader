@@ -1,9 +1,12 @@
-// バリア（シールドのスキル）の膜：六角形の格子、縁の光、流れる光、展開・消滅・被弾の波紋・残り少ないときのちらつき。
-// 値は view/arena/shield_view.gd が毎フレーム渡す。光を足し合わせて描く（暗い中で光って見える）。
+// バリア（シールドのスキル）の膜：丸い光の泡。縁が強く光り、表面を光のもやが渦を巻いて流れ、中ほどは淡く透ける。
+// 展開・消滅（もやが焼け切れるように消える）・被弾の波紋・残り少ないときのちらつき。値は view/arena/shield_view.gd が毎フレーム渡す。
 shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled;
 
-uniform vec4 color : source_color = vec4(0.35, 0.8, 1.0, 1.0);
+// 膜の色、縁の色（明るい）、流れるもやの色
+uniform vec4 color : source_color = vec4(0.7, 0.3, 1.0, 1.0);
+uniform vec4 rim_color : source_color = vec4(1.0, 0.7, 1.0, 1.0);
+uniform vec4 wisp_color : source_color = vec4(0.45, 0.6, 1.0, 1.0);
 // 展開の進み（0 で何もない、1 で全部出た）
 uniform float open = 1.0;
 // 消滅の進み（0 で消えていない、1 で全部消えた）
@@ -15,31 +18,41 @@ uniform vec3 hit_dir = vec3(1.0, 0.0, 0.0);
 uniform float hit_age = 10.0;
 // 全体の明るさ
 uniform float intensity = 1.0;
-// 横と縦に並べる六角形の数（低い解像度で潰れないよう粗め）
-uniform float cells_x = 10.0;
-uniform float cells_y = 5.0;
 // 自分の時計（止まっている間は進まない）
 uniform float clock = 0.0;
 
 varying vec3 obj;
 
-const vec2 HEX = vec2(1.0, 1.7320508);
-
-float hash(vec2 p) {
-	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+float hash3(vec3 p) {
+	return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
 }
 
-// 六角形の格子：xy はセルの中心からのずれ、zw はセルの番号
-vec4 hex_cell(vec2 p) {
-	vec4 c = floor(vec4(p, p - vec2(0.5, 1.0)) / HEX.xyxy) + 0.5;
-	vec4 h = vec4(p - c.xy * HEX, p - (c.zw + 0.5) * HEX);
-	return dot(h.xy, h.xy) < dot(h.zw, h.zw) ? vec4(h.xy, c.xy) : vec4(h.zw, c.zw + 0.5);
+// なめらかなノイズ（0〜1）
+float noise3(vec3 p) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float n000 = hash3(i);
+	float n100 = hash3(i + vec3(1, 0, 0));
+	float n010 = hash3(i + vec3(0, 1, 0));
+	float n110 = hash3(i + vec3(1, 1, 0));
+	float n001 = hash3(i + vec3(0, 0, 1));
+	float n101 = hash3(i + vec3(1, 0, 1));
+	float n011 = hash3(i + vec3(0, 1, 1));
+	float n111 = hash3(i + vec3(1, 1, 1));
+	return mix(mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y),
+		mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y), f.z);
 }
 
-// セルの中心で 0、縁で 0.5
-float hex_edge(vec2 h) {
-	h = abs(h);
-	return max(dot(h, HEX * 0.5), h.x);
+float fbm(vec3 p) {
+	return noise3(p) * 0.55 + noise3(p * 2.1 + 3.1) * 0.3 + noise3(p * 4.3 + 7.7) * 0.15;
+}
+
+// y 軸のまわりに回す
+vec3 spin(vec3 p, float a) {
+	float c = cos(a);
+	float s = sin(a);
+	return vec3(c * p.x - s * p.z, p.y, s * p.x + c * p.z);
 }
 
 void vertex() {
@@ -49,55 +62,55 @@ void vertex() {
 void fragment() {
 	vec3 n = normalize(obj);
 	float height = n.y * 0.5 + 0.5;
-	// 球の表面を、横（ぐるりと一周）と縦の座標にして六角形を並べる。横は一周でちょうどつながる
-	vec2 p = vec2((atan(n.z, n.x) / TAU + 0.5) * cells_x, height * cells_y * HEX.y);
-	vec4 h = hex_cell(p);
-	float edge = hex_edge(h.xy);
-	float line = smoothstep(0.38, 0.47, edge);
-	float r = hash(h.zw);
 
-	// 展開：下から上へ、セルごとに少しずれて現れる。届いたばかりの所は白く光る
-	float reveal = open * 1.35 - height - r * 0.3;
-	float vis = step(0.0, reveal);
-	float front = (1.0 - smoothstep(0.0, 0.18, reveal)) * vis;
+	// 縁ほど明るい（泡の輪郭がくっきり光る）
+	float facing = abs(dot(NORMAL, VIEW));
+	float fres = pow(1.0 - facing, 3.0);
+	float rim = pow(1.0 - facing, 7.0);
 
-	// 消滅：セルがばらばらに消える。消える直前のセルは強く光る
-	vis *= step(dissolve, r);
-	float dying = dissolve > 0.0 ? (1.0 - smoothstep(0.0, 0.12, r - dissolve)) : 0.0;
+	// 渦を巻いて流れる光のもや：高さで回る角度を変えて、ねじれながら回る
+	vec3 q = spin(n, clock * 0.9 + height * 2.2);
+	float w = fbm(q * 2.2 + vec3(0.0, -clock * 0.6, 0.0));
+	float wisp = smoothstep(0.52, 0.78, w);
+	// 細く走る光の筋（もやの縁）
+	float streak = smoothstep(0.05, 0.0, abs(w - 0.6)) * 0.8;
+	// ゆっくり脈打つ
+	float pulse = 0.85 + 0.15 * sin(clock * 4.0);
 
-	// 流れる光（下から上へ走る帯）と、セルごとのまたたき
-	float band = pow(0.5 + 0.5 * sin((height * 3.0 - clock * 0.9) * TAU), 6.0);
-	float twinkle = 0.5 + 0.5 * sin(clock * 3.0 + r * TAU);
+	// 展開：中心からふくらむ間、全体が白く強く光る
+	float flash = (1.0 - open) * 1.5;
+
+	// 消滅：もやの模様にそって焼け切れるように消え、消える縁が明るく光る
+	float burn = fbm(n * 3.0 + 11.0);
+	float vis = dissolve > 0.0 ? step(dissolve * 1.1, burn) : 1.0;
+	float dying = dissolve > 0.0 ? (1.0 - smoothstep(0.0, 0.08, burn - dissolve * 1.1)) * vis : 0.0;
 
 	// 被弾：当たった所が光り、輪が膜の上を広がっていく
 	float d = acos(clamp(dot(n, normalize(hit_dir)), -1.0, 1.0));
 	float ring = exp(-pow((d - hit_age * 5.0) * 5.0, 2.0)) * exp(-hit_age * 2.5);
 	float impact = exp(-d * 3.0) * exp(-hit_age * 5.0);
-	float near_hit = exp(-d * 2.0) * exp(-hit_age * 3.0) * (1.0 - line);
 
-	// 縁ほど明るい（輪郭が光る）
-	float fres = pow(1.0 - abs(dot(NORMAL, VIEW)), 2.2);
-
-	float a = 0.04
-		+ fres * 0.75
-		+ line * (0.22 + 0.18 * twinkle)
-		+ band * 0.12 * (0.4 + line)
-		+ front * 1.4
-		+ dying * 1.2
-		+ ring * 1.6
-		+ impact * 1.5
-		+ near_hit * 0.6;
+	float a = 0.05
+		+ fres * 0.55 * pulse
+		+ rim * 0.9
+		+ wisp * 0.32
+		+ streak * 0.35
+		+ flash
+		+ dying * 1.4
+		+ ring * 1.5
+		+ impact * 1.4;
 	// 裏側（内側）の面は薄く
-	a *= FRONT_FACING ? 1.0 : 0.4;
-	// 残り少ない：ときどき暗くなり、セルの一部が欠ける
+	a *= FRONT_FACING ? 1.0 : 0.45;
+	// 残り少ない：ときどき暗くなり、もやが乱れる
 	float tick = floor(clock * 14.0);
-	float off = step(0.55, hash(vec2(tick, 3.7)));
+	float off = step(0.55, hash3(vec3(tick, 3.7, 1.0)));
 	a *= 1.0 - flicker * 0.65 * off;
-	vis *= 1.0 - flicker * step(0.8, hash(h.zw + tick)) ;
-	a *= vis * intensity;
+	a *= open * vis * intensity;
 
-	// 白く光らせる部分（展開の先、被弾、消える直前）
-	float hot = clamp(front + impact + ring * 0.6 + dying, 0.0, 1.0);
-	ALBEDO = mix(color.rgb, vec3(1.0), hot * 0.7);
+	// 色：中は膜の色、縁は明るい色、もやは青み、白く光らせる部分（展開・被弾・消える縁）
+	vec3 col = mix(color.rgb, rim_color.rgb, clamp(rim * 1.5 + fres * 0.3, 0.0, 1.0));
+	col = mix(col, wisp_color.rgb, clamp(wisp * 0.6 + streak, 0.0, 1.0) * (1.0 - rim));
+	float hot = clamp(flash + impact + ring * 0.6 + dying, 0.0, 1.0);
+	ALBEDO = mix(col, vec3(1.0), hot * 0.7);
 	ALPHA = clamp(a, 0.0, 1.0);
 }

@@ -118,6 +118,121 @@ static func heal_chime() -> AudioStreamWAV:
 	return s
 
 
+## 火炎放射器の炎：低くこもった「ゴォー」という轟音に、ぱちぱちはぜる音と、噴き出す「シュー」を重ねる（くり返して鳴らす）
+static func flame_roar() -> AudioStreamWAV:
+	if _cache.has("flame_roar"):
+		return _cache["flame_roar"]
+	var n: int = int(RATE * 1.0)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var lp: float = 0.0
+	var lp2: float = 0.0
+	for k: int in n:
+		var t: float = float(k) / RATE
+		var raw: float = _noise(k + 40000)
+		lp += (raw - lp) * 0.06
+		lp2 += (raw - lp2) * 0.4
+		var roar: float = lp * 2.4 * (0.8 + 0.2 * sin(TAU * 6.0 * t) * sin(TAU * 2.3 * t))
+		var hiss: float = (raw - lp2) * 0.25
+		var crackle: float = 0.0
+		if _noise(k / 40 + 9100) > 0.82:
+			crackle = _noise(k + 123) * exp(-float(k % 40) * 0.15) * 0.6
+		buf[k] = clampf((roar + hiss + crackle) * Look.SFX_VOLUME, -1.0, 1.0)
+	var fade: int = int(RATE * 0.02)
+	for k: int in fade:
+		var a: float = float(k) / fade
+		buf[k] = buf[k] * a + buf[n - fade + k] * (1.0 - a)
+	var s: AudioStreamWAV = _wav(buf.slice(0, n - fade), true)
+	_cache["flame_roar"] = s
+	return s
+
+
+## 火炎放射器に火がつく音：「ボッ」という低い破裂音
+static func flame_ignite() -> AudioStreamWAV:
+	if _cache.has("flame_ignite"):
+		return _cache["flame_ignite"]
+	var n: int = int(RATE * 0.35)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var lp: float = 0.0
+	for k: int in n:
+		var t: float = float(k) / RATE
+		lp += (_noise(k + 50000) - lp) * 0.15
+		var thump: float = sin(TAU * lerpf(110.0, 50.0, minf(1.0, t / 0.2)) * t) * exp(-t * 12.0)
+		buf[k] = clampf((thump * 0.8 + lp * 2.0 * exp(-t * 9.0)) * Look.SFX_VOLUME, -1.0, 1.0)
+	var s: AudioStreamWAV = _wav(buf, false)
+	_cache["flame_ignite"] = s
+	return s
+
+
+## 文字が叩きつけられる音（VS・掛け声）：低い「ドン」に、短いノイズの「バシッ」を重ねる
+static func slam() -> AudioStreamWAV:
+	if _cache.has("slam"):
+		return _cache["slam"]
+	var n: int = int(RATE * 0.35)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var phase: float = 0.0
+	for k: int in n:
+		var t: float = float(k) / RATE
+		phase += TAU * lerpf(140.0, 45.0, minf(1.0, t / 0.2)) / RATE  # 下がっていく低い音
+		var v: float = sin(phase) * exp(-t * 9.0) * 0.9
+		v += _noise(k) * exp(-t * 45.0) * 0.6
+		buf[k] = clampf(v * Look.SFX_VOLUME, -1.0, 1.0)
+	var s: AudioStreamWAV = _wav(buf, false)
+	_cache["slam"] = s
+	return s
+
+
+## 試合開始の合図（FIGHT!）：金管のような和音を強く鳴らし、低い打撃と金属の響きを重ねる
+static func fight_stab() -> AudioStreamWAV:
+	if _cache.has("fight_stab"):
+		return _cache["fight_stab"]
+	var n: int = int(RATE * 1.1)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var chord: Array[float] = [110.0, 164.8, 220.0, 277.2, 329.6]
+	for k: int in n:
+		var t: float = float(k) / RATE
+		var env: float = minf(1.0, t / 0.01) * exp(-t * 2.6)
+		var v: float = 0.0
+		for f: float in chord:
+			# のこぎり波に近い、倍音の多い音（5つの倍音を足す）
+			for h: int in range(1, 6):
+				v += sin(TAU * f * h * t) / float(h) * 0.09
+		v *= env
+		v += sin(TAU * 55.0 * t) * exp(-t * 7.0) * 0.6
+		v += _noise(k) * exp(-t * 30.0) * 0.35
+		v += sin(TAU * 1870.0 * t) * sin(TAU * 2410.0 * t) * exp(-t * 5.0) * 0.12
+		buf[k] = clampf(v * Look.SFX_VOLUME, -1.0, 1.0)
+	var s: AudioStreamWAV = _wav(buf, false)
+	_cache["fight_stab"] = s
+	return s
+
+
+## 決着の音（K.O.!）：お腹に響く低い爆音と、長く残るゴロゴロという余韻
+static func ko_boom() -> AudioStreamWAV:
+	if _cache.has("ko_boom"):
+		return _cache["ko_boom"]
+	var n: int = int(RATE * 2.0)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var phase: float = 0.0
+	var rumble: float = 0.0
+	for k: int in n:
+		var t: float = float(k) / RATE
+		phase += TAU * lerpf(90.0, 28.0, minf(1.0, t / 0.6)) / RATE
+		var v: float = sin(phase) * exp(-t * 2.2) * 1.0
+		# 低くこもったゴロゴロ：ノイズをなめらかにして重ねる
+		rumble = lerpf(rumble, _noise(k), 0.05)
+		v += rumble * exp(-t * 1.5) * 1.6
+		v += _noise(k * 3 + 7) * exp(-t * 20.0) * 0.5
+		buf[k] = clampf(v * Look.SFX_VOLUME, -1.0, 1.0)
+	var s: AudioStreamWAV = _wav(buf, false)
+	_cache["ko_boom"] = s
+	return s
+
+
 ## -1〜1 の決まったノイズ（同じ番号なら同じ値）
 static func _noise(i: int) -> float:
 	var v: float = sin(float(i) * 12.9898 + 78.233) * 43758.5453

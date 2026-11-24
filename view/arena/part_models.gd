@@ -7,6 +7,8 @@ const Look := preload("res://view/look.gd")
 ## 取り付け位置の目印にする空のノードの名前の頭（フレームのモデルの中に置く。例：weapon_0、skill_1）
 const MOUNT_WEAPON: String = "weapon_"
 const MOUNT_SKILL: String = "skill_"
+## ライトの位置の目印（lamp_0, lamp_1 …）。view/arena/motion_fx_view.gd が光るレンズを置く
+const MOUNT_LAMP: String = "lamp_"
 
 ## 読み込んだモデルのひな形（パス → PackedScene。見つからなかったものは null）
 static var _templates: Dictionary = {}

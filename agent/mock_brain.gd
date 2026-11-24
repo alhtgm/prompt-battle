@@ -90,7 +90,8 @@ func _decide(obs: Dictionary) -> Dictionary:
 
 	var intent: String = "charge"
 	var low_hp: bool = hp < float(_cfg["repair_hp_any_style"]) \
-		or (_style["cautious"] and hp < float(_cfg["repair_hp"]))
+		or (_style["cautious"] and hp < float(_cfg["repair_hp"])) \
+		or (bool(me.get("burning", false)) and hp < float(_cfg["repair_hp"]))  # 燃えていれば早めにパックで消しに行く
 	if low_hp and repair != null and dist > float(_cfg["repair_enemy_dist"]):
 		intent = "go_repair"
 	elif _style["pit"] and en["near_pit"]:

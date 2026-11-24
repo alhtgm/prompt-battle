@@ -21,6 +21,7 @@ const INTENT_TEXT: Dictionary = {
 const BEHAVIOR_TEXT: Dictionary = {
 	"grind": "触れている間削る", "strike": "叩く", "lift": "ひっくり返す", "ram": "体当たり", "shoot": "撃つ",
 	"hook": "前の相手に釣り針を撃って目の前まで引き寄せ、少し動けなくする（届く距離で相手を向くと撃つ）",
+	"flame": "前の近い相手（6m以内）に炎を浴びせ続け、ときどき火傷（しばらく燃え続けてダメージ）にする",
 	"booster": "一時的に速くなる", "shield": "一時的に受けるダメージが減る", "repair": "HPを回復する",
 	"shockwave": "近くの相手を吹き飛ばす", "emp": "近くの相手を止める", "overclock": "一時的に与えるダメージが増える",
 	"self_destruct": "HPが0になると自動で相手に突っ込んで自爆する。選ぶ必要はなく、選んでも何も起きない",
@@ -193,7 +194,7 @@ static func build_system_prompt(prompt: String, build: Dictionary, say_max: int,
 	if text_obs:
 		lines.append("戦況は短い文で毎回渡す。プレイヤーの指示の条件（HPが減ったら、相手が穴の近くなら、弾が切れたら など）が今の戦況に当てはまるかを確かめてから方針を選ぶ。")
 	else:
-		lines.append("戦況の見方：hp は残りHPの%。enemy.dist は相手との距離（3以下で接触、10以上は遠い）。dir は相手の方向。near_pit は穴の近く。behind_me は相手が自分の後ろ側。facing_me は相手がこちらを向いている。ammo は残り弾（null は撃つ武器なし）。repair は一番近い回復パック（dist は距離、dir は方向、heal は回復量。null は場にない）。events は前回からの出来事。")
+		lines.append("戦況の見方：hp は残りHPの%。enemy.dist は相手との距離（3以下で接触、10以上は遠い）。dir は相手の方向。near_pit は穴の近く。behind_me は相手が自分の後ろ側。facing_me は相手がこちらを向いている。burning は火傷で燃えている（回復パックで治る）。ammo は残り弾（null は撃つ武器なし）。repair は一番近い回復パック（dist は距離、dir は方向、heal は回復量。null は場にない）。events は前回からの出来事。")
 	var shape: String = "{\"say\":\"一言\",\"intent\":\"方針\",\"skill\":番号かnull}" if say_first \
 		else "{\"intent\":\"方針\",\"skill\":番号かnull,\"say\":\"一言\"}"
 	lines.append("答えは %s の形だけ。say は操縦士として今の判断を自分の言葉で言う%d文字以内の日本語（指示の文をそのまま写さない）。" % [shape, say_max])
@@ -232,7 +233,8 @@ static func compact_observation(obs: Dictionary) -> Dictionary:
 	return {
 		"time_left": obs.get("time_left"),
 		"me": {"hp": me.get("hp"), "ammo": me.get("ammo"), "stunned": me.get("stunned"),
-			"near_pit": me.get("near_pit"), "intent": me.get("intent"), "skills_ready": ready},
+			"near_pit": me.get("near_pit"), "intent": me.get("intent"), "skills_ready": ready,
+			"burning": me.get("burning", false)},
 		"enemy": obs.get("enemy", {}),
 		"repair": obs.get("repair"),
 		"events": obs.get("events", []),
@@ -253,6 +255,8 @@ static func describe_observation(obs: Dictionary, cfg: Dictionary) -> String:
 	mine.append("撃つ武器なし" if ammo == null else ("弾切れ" if int(ammo) <= 0 else "弾あり（%d発）" % int(ammo)))
 	if me.get("stunned", false):
 		mine.append("動けない")
+	if me.get("burning", false):
+		mine.append("燃えている（火傷。回復パックで治る）")
 	if me.get("near_pit", false):
 		mine.append("自分が穴の近くにいる")
 	var ready: PackedStringArray = PackedStringArray()
@@ -276,6 +280,8 @@ static func describe_observation(obs: Dictionary, cfg: Dictionary) -> String:
 		theirs.append("自分の後ろ側にいる")
 	if en.get("stunned", false):
 		theirs.append("動けない")
+	if en.get("burning", false):
+		theirs.append("燃えている")
 	lines.append("相手：" + "、".join(theirs) + "。")
 	if rep.is_empty():
 		lines.append("回復パック：今は場にない。")
