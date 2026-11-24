@@ -43,6 +43,10 @@ var data: GameData
 var rng: Rng
 ## このバトルのステージ（data/stages.json の1つ）。画面はここから床や穴を描く
 var stage: Dictionary = {}
+## 開発モードの設定（作ったあと、進める前に変える）。invincible[i] なら機体 i のHPが減らない（ダメージの記録と演出は残す）。
+## no_time_limit なら制限時間で決着しない
+var invincible: Array[bool] = [false, false]
+var no_time_limit: bool = false
 var robots: Array[Robot] = []
 var shots: Array[Shot] = []
 ## 次に撃つ弾の番号
@@ -151,9 +155,9 @@ func time_left() -> float:
 	return maxf(0.0, float(time_limit_ticks - tick) / float(tick_rate))
 
 
-## 決着するまで進めて結果を返す（画面なしの試合用）
+## 決着するまで進めて結果を返す（画面なしの試合用）。制限時間がない（開発モード）ときは、制限時間の分だけ進めて止める
 func run_to_end() -> Dictionary:
-	while not over:
+	while not over and (not no_time_limit or tick < time_limit_ticks):
 		step()
 	return result
 
@@ -524,7 +528,8 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 	mult *= 1.0 - clampf(v.active_value("shield", "damage_cut", 0.0), 0.0, 1.0)
 	mult *= maxf(0.0, a.active_value("overclock", "damage_mult", 1.0))
 	var dmg: float = amount * mult
-	v.hp = maxf(0.0, v.hp - dmg)
+	if not invincible[victim_i]:
+		v.hp = maxf(0.0, v.hp - dmg)
 	a.dealt += dmg
 	# HPが尽きたら、自爆装置があれば導火線に火がつく（自爆で壊されたときは道連れなのでつかない）
 	if v.hp <= 0.0 and not _blasting:
@@ -794,7 +799,7 @@ func _check_over() -> void:
 		# 両方倒れていて、自爆が相手を壊したのなら、自爆による道連れ（引き分け）
 		reason = REASON_SELF_DESTRUCT if both and _blast_kill else REASON_DESTROYED
 		winner = -1 if both else (1 if a.is_down() else 0)
-	elif tick >= time_limit_ticks:
+	elif tick >= time_limit_ticks and not no_time_limit:
 		reason = REASON_TIME
 		var diff: float = a.hp_ratio() - b.hp_ratio()
 		winner = -1 if absf(diff) < float(_b["draw_hp_ratio_diff"]) else (0 if diff > 0.0 else 1)

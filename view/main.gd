@@ -16,6 +16,8 @@ const Look := preload("res://view/look.gd")
 const PostOverlay := preload("res://view/post_overlay.gd")
 const GameClient := preload("res://net/game_client.gd")
 const OnlineScreen := preload("res://view/online/online_screen.gd")
+const DevSession := preload("res://core/dev_session.gd")
+const DevSetupScreen := preload("res://view/dev/dev_setup_screen.gd")
 
 ## ひとりで遊ぶときの、人間のプレイヤーのID
 const HUMAN_ID: int = 0
@@ -44,6 +46,8 @@ var dev_paused: bool = false
 var dev_pause_label: Label
 var _step_pending: int = 0
 var _shown_round: int = -1
+## 開発モードの設定（core/dev_session.gd の default_setup の形）。設定画面・やり直し・編集で使い回す（空なら初めて開く）
+var dev_setup: Dictionary = {}
 
 
 func _ready() -> void:
@@ -197,6 +201,45 @@ func show_title() -> void:
 	session = null
 	_shown_phase = ""
 	_show(TitleScreen.new())
+
+
+## 開発モードの設定画面を出す（開発用の書き出しだけ）。前の設定が残っていればそれを続けて編集する
+func open_dev_mode() -> void:
+	set_dev_paused(false)
+	leave_online()
+	session = null
+	_shown_phase = ""
+	if dev_setup.is_empty():
+		dev_setup = DevSession.default_setup(data)
+	_show(DevSetupScreen.new())
+
+
+## 開発モードの設定で試合を始める。問題があれば理由を返す
+func start_dev_battle() -> String:
+	var problem: String = DevSession.check_setup(data, dev_setup)
+	if not problem.is_empty():
+		return problem
+	session = DevSession.new(data, agents, dev_setup)
+	battle_speed = 1.0
+	set_dev_paused(false)
+	_shown_phase = ""
+	_sync_screen()
+	return ""
+
+
+## 開発モードの試合を、同じ設定・同じ種で最初からやり直す
+func restart_dev_battle() -> void:
+	if not is_dev_mode():
+		return
+	session.restart()
+	set_dev_paused(false)
+	_shown_phase = ""
+	_sync_screen()
+
+
+## 開発モードの試合中か
+func is_dev_mode() -> bool:
+	return session is DevSession
 
 
 ## 通信対戦の画面（つなぐ・待合室）を出す

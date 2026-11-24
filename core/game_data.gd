@@ -107,6 +107,15 @@ const NUMBER_RULES: Array = [
 	["match.pairing_attempts", 1, true],
 ]
 
+## ステージのギミック（stages.json の各ステージに書く項目 → 名前）。docs/design.md「ステージとギミック」
+## 配列の項目は空なら「ない」、sudden_death は true なら「ある」
+const GIMMICKS: Dictionary = {
+	"bounce_walls": "バウンド壁",
+	"warps": "ワープ床",
+	"belts": "コンベア床",
+	"sudden_death": "サドンデス",
+}
+
 ## 引き分けのときのダメージの扱い
 const DRAW_DAMAGE_MODES: Array[String] = ["none", "rank_only"]
 
@@ -232,6 +241,47 @@ func get_stage(id: String) -> Dictionary:
 func first_stage() -> Dictionary:
 	return get_stage(first_stage_id)
 
+
+## ステージにそのギミックがあるか
+static func stage_has_gimmick(st: Dictionary, key: String) -> bool:
+	var v: Variant = st.get(key)
+	if v is Array:
+		return not (v as Array).is_empty()
+	return v is bool and v
+
+
+## ステージにあるギミック（GIMMICKS の順）
+static func stage_gimmicks(st: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for key: String in GIMMICKS:
+		if stage_has_gimmick(st, key):
+			out.append(key)
+	return out
+
+
+## 決めたギミックを外したステージの写し（元のステージは変えない）。開発モードで使う
+static func without_gimmicks(st: Dictionary, keys: Array) -> Dictionary:
+	var out: Dictionary = st.duplicate(true)
+	for key: Variant in keys:
+		if not GIMMICKS.has(key):
+			continue
+		if out.get(key) is Array:
+			out[key] = []
+		elif out.has(key):
+			out[key] = false
+	return out
+
+
+## 手で作り替えたステージ（開発モードの編集など）を、読み込みのときと同じ決まりで確かめる。問題の一覧を返す（空なら正常）
+func check_stage(st: Dictionary) -> PackedStringArray:
+	var saved: PackedStringArray = errors
+	errors = PackedStringArray()
+	var where: String = "ステージ %s" % str(st.get("id", ""))
+	if _check_stage_shape(st, where):
+		_check_stage_places(st, where)
+	var found: PackedStringArray = errors
+	errors = saved
+	return found
 
 
 ## "battle.time_limit_sec" のような点区切りのパスでルールの値を取る
