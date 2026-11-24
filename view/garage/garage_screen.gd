@@ -7,6 +7,10 @@ extends "res://view/screen_base.gd"
 const GameData := preload("res://core/game_data.gd")
 const FuseBar := preload("res://view/fuse_bar.gd")
 const Loot := preload("res://core/loot.gd")
+const StageMap := preload("res://view/stage_map.gd")
+
+## ステージの見取り図の大きさ（px）
+const STAGE_MAP_PX: float = 96.0
 
 ## 押すとプロンプト欄に入る例（[ボタンの名前, プロンプト]）
 const PROMPT_EXAMPLES: Array = [
@@ -47,6 +51,9 @@ var reroll_overlay: Control = null
 var _reroll_stats_box: GridContainer
 var _reroll_title: Label
 var _sig: String = ""
+## このラウンドのステージの見取り図と名前
+var stage_map: Control = null
+var stage_label: Label = null
 
 
 func build_ui() -> void:
@@ -120,7 +127,8 @@ func build_ui() -> void:
 			var rb: Button = _small_button(line, reroll.bind(part.uid))
 			rows[part.uid] = {"line": line, "box": b, "scrap": sb, "reroll": rb}
 
-	# 右：残り時間の説明、操縦士、プロンプト、出撃、体力の一覧（残り時間そのものは上の導火線）
+	# 右：このラウンドのステージ、残り時間の説明、操縦士、プロンプト、出撃、体力の一覧（残り時間そのものは上の導火線）
+	_add_stage_info(right)
 	_timer = add_label("時間切れになると前の機体で出撃", 15, COL_DIM, right)
 	_brain = add_label("", 15, COL_DIM, right)
 	add_label("操縦士へのプロンプト", 22, COL_ACCENT, right)
@@ -161,6 +169,25 @@ func build_ui() -> void:
 	_sync_boxes()
 	_update_info()
 	_refresh_maintenance()
+
+
+## このラウンドのステージの見取り図と説明（プロンプトをステージに合わせて書けるように）
+func _add_stage_info(parent: VBoxContainer) -> void:
+	var st: Dictionary = session().stage
+	if st.is_empty():
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	parent.add_child(row)
+	stage_map = StageMap.new()
+	stage_map.custom_minimum_size = Vector2(STAGE_MAP_PX, STAGE_MAP_PX)
+	row.add_child(stage_map)
+	stage_map.set_stage(st)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(col)
+	stage_label = add_label("ステージ：%s" % st["name"], 20, COL_ACCENT, col)
+	add_label(str(st["description"]), 15, COL_DIM, col)
 
 
 func _process(delta: float) -> void:

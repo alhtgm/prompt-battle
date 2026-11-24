@@ -58,7 +58,7 @@ func build_ui() -> void:
 	container.add_child(vp)
 	arena = ArenaView.new()
 	vp.add_child(arena)
-	arena.setup(main.data)
+	arena.setup(main.data, watched_battle.sim.stage if watched_battle != null else {})
 	if watched_battle != null:
 		arena.bind(watched_battle.sim)
 	# アリーナだけに強い画面効果（ざらつき・色の段数・周辺の暗さ）をかける。文字の板はこの上に出す
@@ -383,8 +383,8 @@ func refresh() -> void:
 	var names: Array = [sim.robots[0].name, sim.robots[1].name]
 	var spectating: String = "（観戦中）" if not s.get_player(main.human_id).alive else ""
 	var speed_text: String = "一時停止中" if main.dev_paused else "%s倍" % main.battle_speed
-	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s）\n%s" % [
-		s.round_no, spectating, sim.now(), sim.time_left(), speed_text, main.agents.brain_status_text()]
+	header.text = "ラウンド %d・%s%s　%.1f 秒 / 残り %.1f 秒（%s）\n%s" % [
+		s.round_no, sim.stage.get("name", ""), spectating, sim.now(), sim.time_left(), speed_text, main.agents.brain_status_text()]
 	if sim.over:
 		var w: int = int(sim.result["winner"])
 		var all_over: bool = float(s.get("battle_end_left")) >= 0.0 if "battle_end_left" in s else false

@@ -41,6 +41,8 @@ var seed_value: int = 0
 var players: Array[Player] = []
 var phase: String = PHASE_DRAFT
 var round_no: int = 0
+## 今のラウンドのステージ（data/stages.json の1つ）。ラウンドの始め（組み立ての前）に決まる
+var stage: Dictionary = {}
 ## 開始時の選出（種類 → 実物の配列）。全員に同じものを見せる
 var draft_offer: Dictionary = {}
 ## 今のラウンドのバトル
@@ -441,10 +443,22 @@ func _copy_part(src: PartInstance) -> PartInstance:
 
 func _start_round() -> void:
 	round_no += 1
+	stage = _pick_stage()
 	for p: Player in players:
 		p.done_this_phase = false
 	phase_time_left = float(data.rule("round.build_time_limit_sec"))
 	phase = PHASE_BUILD
+
+
+## このラウンドのステージを選ぶ。1ラウンド目は決まったもの、2ラウンド目からは直前と違うものを種から選ぶ
+func _pick_stage() -> Dictionary:
+	if round_no <= 1 or data.stages.size() <= 1:
+		return data.first_stage()
+	var choices: Array[Dictionary] = []
+	for st: Dictionary in data.stages:
+		if st["id"] != stage.get("id", ""):
+			choices.append(st)
+	return choices[_rng.fork("round/%d/stage" % round_no).randi_range(0, choices.size() - 1)]
 
 
 func _start_battles() -> void:
@@ -500,7 +514,7 @@ func _add_battle(a: int, b: int) -> void:
 		brains.append(_agents.make_brain(humans[side], _rng.fork("round/%d/brain/%d/%d" % [round_no, k, side]),
 			ids[side], humans[1 - side]))
 	bt.prompts = prompts.duplicate()
-	bt.sim = BattleSim.new(data, builds, brains, prompts, names, _rng.fork("round/%d/battle/%d" % [round_no, k]))
+	bt.sim = BattleSim.new(data, builds, brains, prompts, names, _rng.fork("round/%d/battle/%d" % [round_no, k]), stage)
 	battles.append(bt)
 
 
@@ -594,7 +608,7 @@ func _finish_battles() -> void:
 	var eliminated: Array[int] = []
 	for p: Player in out_now:
 		eliminated.append(p.id)
-	history.append({"round": round_no, "battles": entries, "damage": dmg, "eliminated": eliminated,
+	history.append({"round": round_no, "stage": stage["id"], "battles": entries, "damage": dmg, "eliminated": eliminated,
 		"health": health_after, "ranks": rank, "scrap_gain": scrap_gain})
 	phase = PHASE_ROUND_RESULT
 

@@ -49,9 +49,9 @@ func _robot_ok(r: Robot, half: float) -> bool:
 
 func test_every_match_finishes_with_sane_numbers() -> void:
 	var data := H.load_data()
-	var half: float = float(data.rule("battle.arena.half_size"))
 	for seed_value: int in 40:
 		var sim: BattleSim = H.make_match(data, seed_value)
+		var half: float = float(sim.stage["half_size"])
 		var broken: int = 0
 		while not sim.over and sim.tick <= sim.time_limit_ticks + 1:
 			sim.step()
@@ -195,16 +195,17 @@ func test_think_interval_and_broken_answer() -> void:
 
 func test_driver_outputs_are_finite_for_every_intent() -> void:
 	var data := H.load_data()
-	var b: Dictionary = data.rules["battle"]
+	var b: Dictionary = BattleSim.rules_for(data, data.first_stage())
 	var rng := Rng.new(8)
 	var bad: int = 0
 	for k: int in 300:
 		var builds: Array = [Loot.random_build(data, rng, 1), Loot.random_build(data, rng, 50)]
 		var me := Robot.new()
 		var en := Robot.new()
-		me.setup(data, builds[0], 0, "A", b["arena"]["spawns"][0], b["robot"])
-		en.setup(data, builds[1], 1, "B", b["arena"]["spawns"][1], b["robot"])
-		var half: float = float(b["arena"]["half_size"])
+		var st: Dictionary = data.first_stage()
+		me.setup(data, builds[0], 0, "A", st["spawns"][0], b["robot"])
+		en.setup(data, builds[1], 1, "B", st["spawns"][1], b["robot"])
+		var half: float = float(st["half_size"])
 		me.x = rng.randf_range(-half, half)
 		me.z = rng.randf_range(-half, half)
 		en.x = me.x if k % 10 == 0 else rng.randf_range(-half, half)  # 重なったときも調べる
@@ -226,7 +227,7 @@ func test_observation_has_expected_shape() -> void:
 	for k: int in 120:
 		sim.step()
 	var Observation := preload("res://core/observation.gd")
-	var obs: Dictionary = Observation.build(sim.robots[0], sim.robots[1], sim.now(), sim.time_left(), data.rules["battle"])
+	var obs: Dictionary = Observation.build(sim.robots[0], sim.robots[1], sim.now(), sim.time_left(), sim.battle_rules())
 	for key: String in ["t", "me", "enemy", "repair", "events"]:
 		check(obs.has(key), "戦況に %s がある" % key)
 	for key: String in ["hp", "pos", "facing", "ammo", "stunned", "skills"]:

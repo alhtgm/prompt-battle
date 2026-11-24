@@ -30,19 +30,25 @@ var tick_rate: int = 60
 var time_limit_ticks: int = 0
 var over: bool = false
 var result: Dictionary = {}
+## このバトルのステージ（data/stages.json の1つ）
+var stage: Dictionary = {}
 
 var _targets: Array[Vector3] = []
 var _got_frame: bool = false
 var _since_frame: float = 0.0
 
 
-func setup(data: GameData, builds: Array, names: Array) -> void:
+## stage_id はステージのID。知らないIDなら1ラウンド目のステージ
+func setup(data: GameData, builds: Array, names: Array, stage_id: String = "") -> void:
 	var b: Dictionary = data.rules["battle"]
+	stage = data.get_stage(stage_id)
+	if stage.is_empty():
+		stage = data.first_stage()
 	tick_rate = int(data.rule("tick_rate"))
 	time_limit_ticks = roundi(float(b["time_limit_sec"]) * tick_rate)
 	for i: int in 2:
 		var r := Robot.new()
-		r.setup(data, builds[i], i, str(names[i]), b["arena"]["spawns"][i], b["robot"])
+		r.setup(data, builds[i], i, str(names[i]), stage["spawns"][i], b["robot"])
 		robots.append(r)
 		_targets.append(Vector3(r.x, r.z, r.th))
 

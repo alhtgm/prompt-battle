@@ -48,6 +48,8 @@ func _check_battle_screen(b: Node, main: Node) -> void:
 			check(b.side_says[i].text.contains(robot.say), "ラウンド %d：機体 %d の一言が見える" % [r, i])
 			check(view.label.text.contains(robot.say), "ラウンド %d：機体 %d の頭上に一言が出る" % [r, i])
 	check(b.arena.camera.current, "ラウンド %d：アリーナのカメラが使われている" % r)
+	check(b.arena.stage == main.session.stage, "ラウンド %d：アリーナはそのラウンドのステージで描かれる" % r)
+	check(b.header.text.contains(str(main.session.stage["name"])), "ラウンド %d：バトル画面にステージの名前が出る" % r)
 	# プロンプトの見せ方：生き残っている間は自分のものだけ、脱落したら両方
 	var ids: Array = [b.watched_battle.a, b.watched_battle.b]
 	for i: int in 2:
@@ -90,6 +92,10 @@ func test_play_through_from_title_to_final_ranking() -> void:
 			MatchSession.PHASE_BUILD:
 				if me.alive:
 					var g: Node = main.screen
+					var st: Dictionary = main.session.stage
+					check(g.stage_label != null and g.stage_label.text.contains(str(st["name"])),
+						"ラウンド %d：組み立ての画面にステージ「%s」が出る" % [main.session.round_no, st["name"]])
+					check(g.stage_map != null and g.stage_map.stage == st, "ラウンド %d：見取り図はそのラウンドのステージ" % main.session.round_no)
 					var weapons: Array = []
 					var frame: int = -1
 					for p: Variant in me.hand:

@@ -41,6 +41,8 @@ class Shot:
 
 var data: GameData
 var rng: Rng
+## このバトルのステージ（data/stages.json の1つ）。画面はここから床や穴を描く
+var stage: Dictionary = {}
 var robots: Array[Robot] = []
 var shots: Array[Shot] = []
 ## 次に撃つ弾の番号
@@ -73,11 +75,14 @@ var _blast_kill: bool = false
 
 
 ## builds・brains・prompts・names はどれも2つ。brains は agent_brain.gd を継承したもの
-func _init(game_data: GameData, builds: Array, brains: Array, prompts: Array, names: Array, battle_rng: Rng) -> void:
+## stage はステージ（data/stages.json の1つ）。空なら1ラウンド目のステージ
+func _init(game_data: GameData, builds: Array, brains: Array, prompts: Array, names: Array, battle_rng: Rng,
+		battle_stage: Dictionary = {}) -> void:
 	data = game_data
 	rng = battle_rng
 	_brains = brains
-	_b = data.rules["battle"]
+	stage = battle_stage if not battle_stage.is_empty() else data.first_stage()
+	_b = rules_for(data, stage)
 	tick_rate = int(data.rule("tick_rate"))
 	dt = 1.0 / float(tick_rate)
 	time_limit_ticks = roundi(float(_b["time_limit_sec"]) * tick_rate)
@@ -89,16 +94,32 @@ func _init(game_data: GameData, builds: Array, brains: Array, prompts: Array, na
 		var r := Robot.new()
 		r.setup(data, builds[i], i, str(names[i]), spawns[i], _b["robot"])
 		robots.append(r)
+	# 頭脳には、ルールにこのバトルのステージを足して渡す
+	var brain_rules: Dictionary = data.rules.duplicate()
+	brain_rules["stage"] = stage
 	for i: int in 2:
-		_brains[i].begin(str(prompts[i]), build_summary(data, builds[i]), data.rules)
+		_brains[i].begin(str(prompts[i]), build_summary(data, builds[i]), brain_rules)
 	# 回復パックを最初から count 個置く（場所と大小は、試合の種から分けた乱数で決める）
 	_pack_rng = battle_rng.fork("health_packs")
 	# 最初の分は決まった場所（initial）に、足りない分と出直す分はランダムな場所に置く
-	var initial: Array = _b["health_packs"].get("initial", [])
+	var initial: Array = stage["packs"]
 	for k: int in int(_b["health_packs"]["count"]):
 		var p: Dictionary = {"id": 0, "x": 0.0, "z": 0.0, "big": false, "heal": 0.0, "active": false, "t": 0.0}
 		packs.append(p)
 		_place_pack(p, initial[k] if k < initial.size() else {})
+
+
+## バトルのルール（rules.json の battle）に、ステージを "arena" として足したもの。
+## 実行役（robot_driver.gd）や戦況づくり（observation.gd）は、場の形を battle["arena"] から読む
+static func rules_for(game_data: GameData, battle_stage: Dictionary) -> Dictionary:
+	var b: Dictionary = game_data.rules["battle"].duplicate()
+	b["arena"] = battle_stage
+	return b
+
+
+## このバトルで使っているルール（rules_for の結果）。テストで実行役や戦況づくりを直接呼ぶときに使う
+func battle_rules() -> Dictionary:
+	return _b
 
 
 ## エージェントに渡す機体の説明
