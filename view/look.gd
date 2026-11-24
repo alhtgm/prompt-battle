@@ -81,12 +81,19 @@ const MODEL_SIDE_TINT: float = 0.2
 const MODEL_RING_RADIUS: float = 1.1
 
 # ---- バリア（シールドのスキル。view/arena/shield_view.gd と view/shaders/shield.gdshader） ----
-const SHIELD_COLOR := Color(0.35, 0.8, 1.0)
+## 泡の色（紫）、縁の明るい色、表面を流れるもやの色（青み）、中を飛び交う光の筋の色
+const SHIELD_COLOR := Color(0.62, 0.25, 1.0)
+const SHIELD_RIM_COLOR := Color(1.0, 0.65, 1.0)
+const SHIELD_WISP_COLOR := Color(0.4, 0.55, 1.0)
+const SHIELD_STREAK_COLOR := Color(0.95, 0.9, 1.0)
+## 中を飛び交う光の筋の数
+const SHIELD_STREAKS: int = 36
+## 泡の中心の高さ（包む高さの割合）と、泡の半径を包む高さの何倍以上にするか
+const SHIELD_CENTER: float = 0.4
+const SHIELD_SPHERE_FIT: float = 0.65
 ## 膜の横の半径（当たり判定の半径の何倍か）と、機体の高さに足す余り（m）
 const SHIELD_RADIUS: float = 1.9
 const SHIELD_HEIGHT_PAD: float = 0.7
-## 横と縦に並べる六角形の数（低い解像度で潰れないよう粗め）
-const SHIELD_CELLS := Vector2(10, 5)
 ## 展開と消滅にかける秒数、床の光の輪が広がりきる秒数
 const SHIELD_OPEN_SEC: float = 0.35
 const SHIELD_CLOSE_SEC: float = 0.45

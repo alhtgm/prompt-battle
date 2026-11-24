@@ -1,4 +1,5 @@
-# バリア（シールドのスキル）の見た目。展開→維持→消滅を順に動かし、被弾の波紋・床に広がる光の輪・粒・照り返しの光を出す。
+# バリア（シールドのスキル）の見た目。機体を包む丸い光の泡で、中を光の筋が飛び交う。展開→維持→消滅を順に動かし、
+# 被弾の波紋・床に広がる光の輪・粒・照り返しの光を出す。
 # 試合の状態は読むだけ。robot_view.gd が毎フレーム update() を呼び、被弾したら hit() を呼ぶ。値は view/look.gd。
 extends Node3D
 
@@ -21,16 +22,21 @@ var _floor_mat: StandardMaterial3D
 var _rise: CPUParticles3D
 var _shards: CPUParticles3D
 var _hit_sparks: CPUParticles3D
+## 泡の中を飛び交う光の筋（張っている間ずっと出す）
+var streaks: CPUParticles3D
 var _clock: float = 0.0
 var _hit_age: float = 10.0
 var _radius: float = 1.0
 var _height: float = 1.0
+## 泡の半径（丸い球。下は床に沈む）
+var _sphere_r: float = 1.0
 
 
-## radius：膜の横の半径、height：膜の高さ（機体を包む楕円の球）
+## radius：泡の横の半径、height：包む高さ。泡は丸い球で、高さが足りなければ大きくする（下は床に沈む）
 func setup(radius: float, height: float) -> void:
 	_radius = radius
 	_height = height
+	_sphere_r = maxf(radius, height * Look.SHIELD_SPHERE_FIT)
 	var col: Color = Look.SHIELD_COLOR
 	# 膜
 	dome = MeshInstance3D.new()
@@ -43,11 +49,11 @@ func setup(radius: float, height: float) -> void:
 	_mat = ShaderMaterial.new()
 	_mat.shader = SHIELD_SHADER
 	_mat.set_shader_parameter("color", col)
-	_mat.set_shader_parameter("cells_x", Look.SHIELD_CELLS.x)
-	_mat.set_shader_parameter("cells_y", Look.SHIELD_CELLS.y)
+	_mat.set_shader_parameter("rim_color", Look.SHIELD_RIM_COLOR)
+	_mat.set_shader_parameter("wisp_color", Look.SHIELD_WISP_COLOR)
 	dome.material_override = _mat
 	dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	dome.position.y = height * 0.5
+	dome.position.y = height * Look.SHIELD_CENTER
 	add_child(dome)
 	# 展開のときに床を広がる光の輪と、張っている間の足もとの光
 	_ring_mat = _glow_material(col)
@@ -88,8 +94,17 @@ func setup(radius: float, height: float) -> void:
 	_rise.emission_ring_height = 0.0
 	_shards = _particles(col, 48, 0.7, Vector3.UP, 180.0, 2.0, 6.0, Vector3(0, -9.0, 0))
 	_shards.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE_SURFACE
-	_shards.emission_sphere_radius = radius
-	_shards.position.y = height * 0.5
+	_shards.emission_sphere_radius = _sphere_r
+	_shards.position.y = dome.position.y
+	# 泡の中を飛び交う光の筋：進む向きに伸びた細い光（機体と一緒に動く）
+	streaks = _particles(Look.SHIELD_STREAK_COLOR, Look.SHIELD_STREAKS, 0.55, Vector3.UP, 180.0, 1.5, 3.5, Vector3.ZERO)
+	streaks.one_shot = false
+	streaks.explosiveness = 0.0
+	streaks.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	streaks.emission_sphere_radius = _sphere_r * 0.8
+	streaks.position.y = dome.position.y
+	streaks.particle_flag_align_y = true
+	(streaks.mesh as BoxMesh).size = Vector3(0.03, 0.32, 0.03)
 	_hit_sparks = _particles(Color(1, 1, 1), 16, 0.35, Vector3.UP, 70.0, 2.0, 5.0, Vector3(0, -6.0, 0))
 	_apply(0.0)
 
@@ -132,7 +147,7 @@ func hit(from_world: Vector3) -> void:
 		dir = Vector3(1, 0, 0)
 	dir = dir.normalized()
 	# 膜の中の向きに直す（膜は楕円なので、表面の点を膜の座標に戻してから向きにする）
-	var world_point: Vector3 = center + Vector3(dir.x * _radius, dir.y * _height * 0.5, dir.z * _radius)
+	var world_point: Vector3 = center + dir * _sphere_r
 	var local: Vector3 = dome.global_transform.affine_inverse() * world_point
 	_mat.set_shader_parameter("hit_dir", local.normalized())
 	_hit_age = 0.0
@@ -167,7 +182,7 @@ func _apply(remaining_frac: float) -> void:
 		State.OPENING:
 			var t: float = clampf(phase_t / Look.SHIELD_OPEN_SEC, 0.0, 1.0)
 			open = t
-			pop = 0.75 + 0.25 * _ease_out_back(t)
+			pop = 0.15 + 0.85 * _ease_out_back(t)  # 中心から、ぷるんと行き過ぎてふくらむ
 			bright = 1.0 + (1.0 - t) * 0.8
 		State.CLOSING:
 			var t: float = clampf(phase_t / Look.SHIELD_CLOSE_SEC, 0.0, 1.0)
@@ -178,7 +193,7 @@ func _apply(remaining_frac: float) -> void:
 	if state == State.ON and remaining_frac < Look.SHIELD_LOW_FRAC:
 		low = 1.0 - remaining_frac / Look.SHIELD_LOW_FRAC
 	dome.visible = state != State.OFF
-	dome.scale = Vector3(_radius, _height * 0.5, _radius) * pop
+	dome.scale = Vector3.ONE * _sphere_r * pop
 	_mat.set_shader_parameter("open", open)
 	_mat.set_shader_parameter("dissolve", dissolve)
 	_mat.set_shader_parameter("flicker", low)
@@ -197,6 +212,8 @@ func _apply(remaining_frac: float) -> void:
 	var shown: float = open * (1.0 - dissolve)
 	var hit_flash: float = exp(-_hit_age * 6.0)
 	_floor.visible = shown > 0.0
+	if streaks.is_inside_tree():
+		streaks.emitting = (state == State.ON or state == State.OPENING) and low < 0.9
 	_floor_mat.albedo_color.a = 0.18 * shown * (1.0 - 0.5 * low)
 	light.light_energy = (Look.SHIELD_LIGHT_ENERGY * shown + hit_flash * Look.SHIELD_LIGHT_ENERGY * 2.0) \
 		* (1.0 - 0.5 * low) if state != State.OFF else 0.0
