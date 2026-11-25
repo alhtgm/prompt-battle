@@ -4,11 +4,14 @@ extends MarginContainer
 
 const UiText := preload("res://view/ui_text.gd")
 const Look := preload("res://view/look.gd")
+const KeyGuide := preload("res://view/key_guide.gd")
 
 const COL_TEXT := Look.UI_TEXT
 const COL_DIM := Color(0.55, 0.53, 0.48)
 const COL_ACCENT := Look.UI_ACCENT
 const COL_BAD := Color(0.95, 0.38, 0.3)
+## 画面の四辺の余白（下の余白にはキーガイドを置く）
+const MARGIN: int = 32
 
 ## view/main.gd（画面の切り替え役）
 var main: Node
@@ -18,7 +21,7 @@ var box: VBoxContainer
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
-		add_theme_constant_override("margin_" + side, 32)
+		add_theme_constant_override("margin_" + side, MARGIN)
 	# スクロールはしない。中身は画面（1280×720）に収まるように作る（tests/test_ui_flow.gd で確かめる）
 	box = VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -69,6 +72,21 @@ func add_row() -> HBoxContainer:
 	row.add_theme_constant_override("separation", 12)
 	box.add_child(row)
 	return row
+
+
+## 画面下部にキーガイドを置く。items の形は KeyGuide.set_items() と同じ。
+## 並び（box）には入れず、画面の下の余白の中に重ねるので、ほかの中身の場所を取らない
+func add_key_guide(items: Array) -> KeyGuide:
+	var guide := KeyGuide.new()
+	guide.top_level = true  # コンテナの並びから外す（位置は画面の下端に合わせる）
+	add_child(guide)
+	guide.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	guide.offset_left = MARGIN
+	guide.offset_right = -MARGIN
+	guide.offset_top = -MARGIN + 3
+	guide.offset_bottom = -3
+	guide.set_items(items)
+	return guide
 
 
 ## 通信対戦で操作を送ったあと、ほかの人を待っていることを伝える（ひとりで遊ぶときは何もしない）

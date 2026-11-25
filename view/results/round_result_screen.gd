@@ -32,7 +32,7 @@ func build_ui() -> void:
 	# 1画面に収めるため、体力バーと試合の一覧は行の間を詰めて並べる
 	add_label("体力", 20, COL_ACCENT)
 	_bar_list = VBoxContainer.new()
-	_bar_list.add_theme_constant_override("separation", 2)
+	_bar_list.add_theme_constant_override("separation", 1)  # フォントが DotGothic16 で行が少し高いので、1px に詰める
 	box.add_child(_bar_list)
 	_add_bars(h)
 	add_label("このラウンドの試合", 18, COL_DIM)

@@ -61,6 +61,46 @@ const UI_BORDER := Color(0.42, 0.34, 0.2)
 const UI_TEXT := Color(0.88, 0.85, 0.78)
 const UI_ACCENT := Color(0.95, 0.72, 0.3)
 
+# ---- フォント ----
+## 全画面の文字（project.godot の gui/theme/custom_font と同じもの）
+const UI_FONT_PATH: String = "res://assets/fonts/DotGothic16-Regular.ttf"
+## タイトルの文字と、最初の画面のメニュー
+const TITLE_FONT_PATH: String = "res://assets/fonts/3270-Regular.ttf"
+
+# ---- 画面下部のキーガイド（view/key_guide.gd） ----
+## 文字の大きさ、項目の間、説明の文字の色、キーの札の下地と枠
+const KEY_GUIDE_FONT: int = 14
+const KEY_GUIDE_GAP: int = 22
+const KEY_GUIDE_TEXT := Color(0.62, 0.6, 0.55)
+const KEY_GUIDE_CAP_BG := Color(0.1, 0.09, 0.08)
+const KEY_GUIDE_CAP_BORDER := Color(0.42, 0.34, 0.2)
+
+# ---- 組み立て画面のプロンプト欄（端末のコマンド入力風） ----
+## 欄の下地と枠、先頭の「操縦士> 」の色、打った文字の色、カーソルの色と点滅の間隔（秒）
+const TERM_BG := Color(0.02, 0.025, 0.02)
+const TERM_BORDER := Color(0.42, 0.34, 0.2)
+const TERM_BORDER_FOCUS := Color(0.95, 0.72, 0.3)
+const TERM_PROMPT := Color(0.95, 0.72, 0.3)
+const TERM_TEXT := Color(0.88, 0.85, 0.78)
+const TERM_CARET := Color(0.95, 0.72, 0.3)
+const TERM_BLINK_SEC: float = 0.5
+const TERM_FONT: int = 18
+## 「操縦士> 」を、入力の1行目の文字の高さにそろえるための下げ幅（px）
+const TERM_HEAD_DROP: int = 2
+
+# ---- 出撃ボタン（view/garage/sortie_button.gd）：黄と黒の警告ストライプ ----
+const HAZARD_YELLOW := Color(0.98, 0.78, 0.1)
+const HAZARD_BLACK := Color(0.06, 0.05, 0.04)
+## 縞1本の太さ（絵の点の数）
+const HAZARD_STRIPE_PX: int = 8
+const SORTIE_SIZE := Vector2(200, 52)
+const SORTIE_FONT: int = 26
+const SORTIE_TEXT := Color(1.0, 0.98, 0.92)
+const SORTIE_OUTLINE: int = 10
+## 合わせたとき・押したときの明るさ（1.0 が基準）
+const SORTIE_HOVER_LIGHT: float = 1.15
+const SORTIE_PRESSED_LIGHT: float = 0.75
+
 # ---- タイトル画面（view/title/） ----
 ## タイトルの文字の色（鈍い金色）と、くすんだ影
 const TITLE_COLOR := Color(0.93, 0.68, 0.24)

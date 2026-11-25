@@ -26,7 +26,7 @@ func build_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back_button = add_button("タイトルへ戻る", back_to_title, head)
 	back_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	add_label("フレーム・武器・スキルから1つずつ選ぶ。見出しに合わせるとその種類が開き、◀▶（←→キー）で真ん中に来たものが選ばれる。候補は全員同じ。", 15, COL_DIM)
+	add_label("フレーム・武器・スキルから1つずつ選ぶ（候補は全員同じ）", 15, COL_DIM)
 	var cols: Array[VBoxContainer] = add_columns(1.25)
 	var left: VBoxContainer = cols[0]
 	left.add_theme_constant_override("separation", 6)
@@ -57,6 +57,7 @@ func build_ui() -> void:
 	build_preview.setup(main.data)
 	activate(GameData.KINDS[0], false)
 	_refresh()
+	add_key_guide([[["←", "→"], "選ぶ"], [["↑", "↓"], "種類"]])
 
 
 ## kind の段だけを開き、ほかは見出しの文字だけにする（animate なら少しずつ開閉する）

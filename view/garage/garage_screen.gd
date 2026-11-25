@@ -8,6 +8,7 @@ const GameData := preload("res://core/game_data.gd")
 const FuseBar := preload("res://view/fuse_bar.gd")
 const PartCarousel := preload("res://view/draft/part_carousel.gd")
 const PartDetail := preload("res://view/draft/part_detail.gd")
+const SortieButton := preload("res://view/garage/sortie_button.gd")
 
 ## 押すとプロンプト欄に入る例（[ボタンの名前, プロンプト]）
 const PROMPT_EXAMPLES: Array = [
@@ -36,6 +37,8 @@ var new_tags: Dictionary = {}
 ## 段を並べる場所（フレームを替えて枠の数が変わったら並べ直す）
 var _sections: VBoxContainer
 var _prompt: TextEdit
+## カーソルの点滅の時刻（打つたびに 0 に戻す）
+var _blink_t: float = 0.0
 var _counter: Label
 var _brain: Label
 var _slots: Label
@@ -78,9 +81,6 @@ func build_ui() -> void:
 	var guide := HBoxContainer.new()
 	guide.add_theme_constant_override("separation", 12)
 	left.add_child(guide)
-	var how: Label = add_label("見出しで段を開き、◀▶（←→キー）で真ん中のものを付ける", 15, COL_DIM, guide)
-	how.autowrap_mode = TextServer.AUTOWRAP_OFF
-	how.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for np: Variant in p.new_parts:
 		new_tags[np.uid] = "NEW"
 	_sections = VBoxContainer.new()
@@ -88,12 +88,13 @@ func build_ui() -> void:
 	left.add_child(_sections)
 	_slots = add_label("", 15, COL_DIM, guide)
 	_slots.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# 右：残り時間、プロンプト、出撃、体力の一覧
 	# 1画面に収めるため、説明は短くまとめ、エラーは出撃ボタンの横、体力は2列に並べる
 	_brain = add_label("", 15, COL_DIM, right)
 	add_label("操縦士へのプロンプト", 22, COL_ACCENT, right)
-	add_label("押すと例が入る。時間切れになると前の機体で出撃", 14, COL_DIM, right)
+	add_label("時間切れになると前の機体で出撃", 14, COL_DIM, right)
 	var examples := HFlowContainer.new()
 	examples.add_theme_constant_override("h_separation", 6)
 	examples.add_theme_constant_override("v_separation", 6)
@@ -104,18 +105,15 @@ func build_ui() -> void:
 		b.tooltip_text = ex[1]
 		b.pressed.connect(set_prompt.bind(ex[1]))
 		examples.add_child(b)
-	_prompt = TextEdit.new()
-	_prompt.custom_minimum_size = Vector2(0, 80)
-	_prompt.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	_prompt.add_theme_font_size_override("font_size", 18)
-	_prompt.text = p.prompt
-	_prompt.text_changed.connect(_update_info)
-	right.add_child(_prompt)
+	right.add_child(_make_terminal(p.prompt))
 	# 出撃ボタン・文字数・エラーを1行に並べる
 	var go := HBoxContainer.new()
 	go.add_theme_constant_override("separation", 12)
 	right.add_child(go)
-	add_button("出撃", confirm, go)
+	var sortie := SortieButton.new()
+	sortie.text = "出撃"
+	sortie.pressed.connect(confirm)
+	go.add_child(sortie)
 	_counter = add_label("", 15, COL_DIM, go)
 	_counter.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_counter.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -137,9 +135,14 @@ func build_ui() -> void:
 	box.add_child(_stats)
 	_build_sections()  # 段の動きはプロンプト欄ができてから（↑↓←→の取り合いを判断するため）
 	_update_info()
+	# キーはプロンプト欄の外にいるときだけ効く
+	add_key_guide([[["←", "→"], "付ける"], [["↑", "↓"], "段"]])
 
 
 func _process(delta: float) -> void:
+	_blink_t += delta
+	if _prompt != null:
+		_prompt.queue_redraw()  # カーソルを点滅させる
 	if _brain != null and main.session != null:
 		fuse.update(session().phase_time_left, delta)
 		_brain.text = main.agents.brain_status_text()
@@ -385,6 +388,86 @@ func _input(event: InputEvent) -> void:
 		handled = false
 	if handled:
 		get_viewport().set_input_as_handled()
+
+
+## プロンプト欄を端末のコマンド入力風に作る：黒い下地、先頭に「操縦士> 」、点滅する四角いカーソル
+func _make_terminal(text: String) -> PanelContainer:
+	var term := PanelContainer.new()
+	term.custom_minimum_size = Vector2(0, 80)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Look.TERM_BG
+	bg.border_color = Look.TERM_BORDER
+	bg.set_border_width_all(1)
+	bg.set_content_margin_all(8)
+	term.add_theme_stylebox_override("panel", bg)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 0)
+	term.add_child(row)
+	var head := Label.new()
+	head.text = "操縦士> "
+	head.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	head.add_theme_font_size_override("font_size", Look.TERM_FONT)
+	head.add_theme_color_override("font_color", Look.TERM_PROMPT)
+	head.mouse_filter = Control.MOUSE_FILTER_PASS
+	var head_box := MarginContainer.new()
+	head_box.add_theme_constant_override("margin_top", Look.TERM_HEAD_DROP)
+	head_box.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	head_box.mouse_filter = Control.MOUSE_FILTER_PASS
+	head_box.add_child(head)
+	row.add_child(head_box)
+	_prompt = TextEdit.new()
+	_prompt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_prompt.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_prompt.add_theme_font_size_override("font_size", Look.TERM_FONT)
+	_prompt.add_theme_color_override("font_color", Look.TERM_TEXT)
+	_prompt.add_theme_color_override("caret_color", Color(0, 0, 0, 0))  # カーソルは _draw_caret() で描く
+	# 欄の下地と枠は外側（term）が持つので、入力そのものは透明にする。行の頭を「操縦士> 」の文字にそろえる
+	var none := StyleBoxEmpty.new()
+	for state: String in ["normal", "focus", "read_only"]:
+		_prompt.add_theme_stylebox_override(state, none)
+	_prompt.text = text
+	_prompt.text_changed.connect(_update_info)
+	# 書いている間は枠を明るくする
+	_prompt.focus_entered.connect(func() -> void: bg.border_color = Look.TERM_BORDER_FOCUS)
+	_prompt.focus_exited.connect(func() -> void: bg.border_color = Look.TERM_BORDER)
+	_prompt.draw.connect(_draw_caret)
+	# 打っている間や動かした直後はカーソルを点けたままにする
+	_prompt.caret_changed.connect(func() -> void: _blink_t = 0.0)
+	row.add_child(_prompt)
+	# 「操縦士> 」や余白を押しても書き始められるようにする
+	term.gui_input.connect(func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+			_prompt.grab_focus())
+	return term
+
+
+## 四角いカーソルを点滅させる。選んでいるときは入力の位置、選んでいないときは文の末尾に出す（端末の待ち受けのように）。
+## TextEdit 自身のカーソルは透明にしてあり、どちらの場合もここで描く（ウィンドウが前にないときも消えない）
+func _draw_caret() -> void:
+	if fmod(_blink_t, Look.TERM_BLINK_SEC * 2.0) >= Look.TERM_BLINK_SEC:
+		return
+	var line: int = _prompt.get_line_count() - 1
+	var col: int = _prompt.get_line(line).length()
+	if _prompt.has_focus():
+		line = _prompt.get_caret_line()
+		col = _prompt.get_caret_column()
+	var font: Font = _prompt.get_theme_font("font")
+	var fs: int = _prompt.get_theme_font_size("font_size")
+	var w: float = font.get_char_size("M".unicode_at(0), fs).x
+	var h: float = font.get_height(fs)
+	# カーソルは直前の字の右隣に置く（行の頭なら、その行の最初の字の左端）
+	var x: float = 0.0
+	var top: float = -1.0
+	if col > 0:
+		# get_rect_at_line_column(line, col) は、col の直前（col - 1 番目）の字の場所を返す
+		var r: Rect2i = _prompt.get_rect_at_line_column(line, col)
+		if r.position.x >= 0:
+			x = r.end.x
+			top = r.position.y + (r.size.y - h) * 0.5
+	if top < 0.0:
+		var p: Vector2i = _prompt.get_pos_at_line_column(line, 0)
+		top = maxf(0.0, p.y - h) if p.x >= 0 else 0.0
+	_prompt.draw_rect(Rect2(x, top, w, h), Look.TERM_CARET)
 
 
 ## 選んだ状態をまとめて決める（テストや「前の機体に戻す」用）

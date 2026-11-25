@@ -46,7 +46,7 @@ func build_ui() -> void:
 	var head := add_row()
 	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	add_label("パークを1つ選ぶ", 20, COL_ACCENT, head).autowrap_mode = TextServer.AUTOWRAP_OFF
-	var hint: Label = add_label("試合の間ずっと効き、同じものは重なる。押して選び（1・2・3 キーでも）、決定で確定", 15, COL_DIM, head)
+	var hint: Label = add_label("試合の間ずっと効き、同じものは重なる", 15, COL_DIM, head)
 	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_OFF  # 横並びの中で折り返すと幅が0になり、縦書きのように伸びる
 	var perk_row := HBoxContainer.new()
@@ -76,6 +76,12 @@ func build_ui() -> void:
 		for id: String in me().perks:
 			names.append(main.data.get_perk(id).name)
 		add_label("取ったパーク：" + "、".join(names), 15, COL_DIM).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# パークのカードの番号キー（カードが3枚なら 1・2・3）
+	var keys: Array[String] = []
+	for i: int in perk_cards.size():
+		keys.append(str(i + 1))
+	if not keys.is_empty():
+		add_key_guide([[keys, "パークを選ぶ"]])
 	# 吹き出しは並びの外に置き、画面の並びに押されないようにする
 	tooltip = PartTooltip.new()
 	add_child(tooltip)
