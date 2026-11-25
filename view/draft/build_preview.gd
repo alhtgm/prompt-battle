@@ -8,17 +8,16 @@ const Build := preload("res://core/build.gd")
 const UiText := preload("res://view/ui_text.gd")
 const Look := preload("res://view/look.gd")
 const Showroom := preload("res://view/showroom.gd")
-const PartTooltip := preload("res://view/draft/part_tooltip.gd")
+const PartDetail := preload("res://view/draft/part_detail.gd")
 
-const COL_DIM := Color(0.6, 0.58, 0.53)
-const COL_BAD := Color(0.95, 0.45, 0.35)
-const NOTE_NO_SLOT: String = "このフレームには付けられない"
 
 var data: GameData
 var preview: Showroom
 ## 今見本に載せている機体
 var build: Build = null
-## 種類 → 名前・動き方・説明・ステータスの表・決まった値・注意書き
+## 種類 → 1パーツ分の欄（PartDetail）
+var details: Dictionary = {}
+## 種類 → 名前・動き方・説明・ステータスの表・決まった値・注意書き（欄の中の部品）
 var name_labels: Dictionary = {}
 var tagline_labels: Dictionary = {}
 var desc_labels: Dictionary = {}
@@ -90,63 +89,17 @@ func show_parts(picks: Dictionary) -> void:
 
 
 func _add_section(kind: String) -> void:
-	add_child(HSeparator.new())
-	var kind_col: Color = Look.KIND_COLORS.get(kind, Look.UI_TEXT)
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 10)
-	add_child(head)
-	var tag: Label = _label(head, UiText.KIND_LABELS.get(kind, kind), 13, Color.BLACK)
-	tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var ts := StyleBoxFlat.new()
-	ts.bg_color = kind_col
-	ts.content_margin_left = 8
-	ts.content_margin_right = 8
-	tag.add_theme_stylebox_override("normal", ts)
-	name_labels[kind] = _label(head, "", 19, Look.UI_TEXT)
-	var how: Label = _label(head, "", 14, kind_col.darkened(0.1))
-	how.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	tagline_labels[kind] = how
-	var note: Label = _label(head, NOTE_NO_SLOT, 14, COL_BAD)
-	note.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	note.visible = false
-	note_labels[kind] = note
-	var desc: Label = _label(self, "", 14, Look.UI_TEXT.darkened(0.1))
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc_labels[kind] = desc
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 2)
-	add_child(grid)
-	stats_boxes[kind] = grid
-	var fixed: Label = _label(self, "", 13, COL_DIM)
-	fixed.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	fixed_labels[kind] = fixed
+	var d: PartDetail = PartDetail.new()
+	add_child(d)
+	d.setup(data, kind)
+	details[kind] = d
+	name_labels[kind] = d.name_label
+	tagline_labels[kind] = d.tagline_label
+	desc_labels[kind] = d.desc_label
+	stats_boxes[kind] = d.stats_box
+	fixed_labels[kind] = d.fixed_label
+	note_labels[kind] = d.note_label
 
 
 func _fill_section(kind: String, p: PartInstance, fits: bool) -> void:
-	var def: GameData.PartDef = data.get_part(p.def_id)
-	name_labels[kind].text = def.name
-	tagline_labels[kind].text = UiText.part_tagline(data, p)
-	note_labels[kind].visible = not fits
-	# フレームの説明はどのフレームでも同じ文なので出さない（違いはステータスで見る）
-	desc_labels[kind].text = UiText.part_description(data, p)
-	desc_labels[kind].visible = kind != GameData.KIND_FRAME
-	var grid: GridContainer = stats_boxes[kind]
-	for c: Node in grid.get_children():
-		grid.remove_child(c)
-		c.queue_free()
-	PartTooltip.add_stat_rows(grid, data, p, 15)
-	var fixed: PackedStringArray = UiText.part_fixed_lines(data, p)  # 武器・スキルの枠の数は名前の横（動き方の欄）に出ている
-	fixed_labels[kind].text = " / ".join(fixed)
-	fixed_labels[kind].visible = not fixed.is_empty()
-
-
-func _label(parent: Control, text: String, size_px: int, col: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", size_px)
-	l.add_theme_color_override("font_color", col)
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	parent.add_child(l)
-	return l
+	details[kind].show_part(p, fits)

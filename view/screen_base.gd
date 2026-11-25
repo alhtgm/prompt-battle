@@ -1,4 +1,4 @@
-# 画面の土台。余白つきの縦並びを用意し、見出し・文字・ボタンを足す手伝いをする。
+# 画面の土台。余白つきの縦並びを用意し、見出し・文字・ボタンを足す手伝いをする。スクロールはせず、1画面に収める。
 # 各画面はこれを継承し、build_ui() で中身を作る。試合の状態は main.session から読むだけにする。
 extends MarginContainer
 
@@ -19,13 +19,11 @@ func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
 		add_theme_constant_override("margin_" + side, 32)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(scroll)
+	# スクロールはしない。中身は画面（1280×720）に収まるように作る（tests/test_ui_flow.gd で確かめる）
 	box = VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 8)
-	scroll.add_child(box)
+	add_child(box)
 
 
 ## 中身を作る（main に追加された直後に呼ばれる）
@@ -95,9 +93,11 @@ func add_columns(left_ratio: float = 1.4) -> Array[VBoxContainer]:
 	return cols
 
 
-## 体力の一覧（生き残りが上）
-func add_standings(parent: Control = null) -> void:
+## 体力の一覧（生き残りが上）。short なら「パーク N個」を「パークN」に縮める（狭い場所に並べるとき）
+func add_standings(parent: Control = null, font_size: int = 16, short: bool = false) -> void:
 	for p: Variant in session().standings():
 		var status: String = "%d位" % p.place if p.place > 0 else "生存"
 		var col: Color = COL_ACCENT if p.id == main.human_id else (COL_TEXT if p.alive else COL_DIM)
-		add_label("%s　体力 %d　%s　パーク %d個" % [p.name, roundi(p.health), status, p.perks.size()], 16, col, parent)
+		var perks: String = ("パーク%d" if short else "パーク %d個") % p.perks.size()
+		var l: Label = add_label("%s　体力 %d　%s　%s" % [p.name, roundi(p.health), status, perks], font_size, col, parent)
+		l.autowrap_mode = TextServer.AUTOWRAP_OFF

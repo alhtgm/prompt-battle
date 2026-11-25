@@ -90,6 +90,11 @@ const PREVIEW_SHRINK: int = 2
 # ---- パーツ選び（view/draft/part_carousel.gd・build_preview.gd） ----
 ## 真ん中のカードの大きさ、両脇のカードの縮み具合と真ん中からのずれ（点）、暗さ
 const DRAFT_CARD_SIZE := Vector2(300, 150)
+## 組み立て画面の段のカード（段が多くても1画面に収まるよう、パーツ選びより小さくする）と見出しの文字の大きさ
+const GARAGE_CARD_SIZE := Vector2(260, 112)
+const GARAGE_HEADER_FONT: int = 18
+## 組み立て画面の下の帯に、付けたパーツの詳しい性能を横に何個並べるか
+const GARAGE_DETAIL_COLUMNS: int = 4
 const DRAFT_SIDE_SCALE: float = 0.8
 const DRAFT_SIDE_OFFSET: float = 210.0
 const DRAFT_SIDE_DIM: float = 0.45
@@ -143,15 +148,49 @@ const HP_BAR_LOST := Color(0.9, 0.25, 0.2)
 const HP_BAR_BACK := Color(0.05, 0.05, 0.05)
 const HP_BAR_OUT := Color(0.3, 0.29, 0.27)
 
+# ---- バトル中のHPバー（view/arena/battle_hp_bar.gd） ----
+## 大きさ（点）
+const BATTLE_HP_SIZE := Vector2(340, 26)
+## 削られた直後に白く光る秒数、赤い部分を残す秒数、赤い部分が満タン分を縮むのにかかる秒数
+const BATTLE_HP_FLASH_SEC: float = 0.08
+const BATTLE_HP_LAG_HOLD_SEC: float = 0.45
+const BATTLE_HP_LAG_DRAIN_SEC: float = 1.2
+## 揺れの最大の強さ（点）と、最大から止まるまでの秒数
+const BATTLE_HP_SHAKE_MAX: float = 7.0
+const BATTLE_HP_SHAKE_SEC: float = 0.35
+## 残りがこの割合を切ると赤く脈打つ（1秒に何回）
+const BATTLE_HP_LOW: float = 0.3
+const BATTLE_HP_LOW_PULSE_HZ: float = 2.5
+## 減った・増えた数を飛ばす秒数と文字の大きさ
+const BATTLE_HP_POP_SEC: float = 0.9
+const BATTLE_HP_POP_FONT: int = 20
+const BATTLE_HP_LOST := Color(0.95, 0.22, 0.16)
+const BATTLE_HP_HEAL := Color(0.45, 0.95, 0.45)
+## 減った数の色（赤い部分の上に重ねても読めるよう明るくする）
+const BATTLE_HP_POP_DAMAGE := Color(1.0, 0.96, 0.88)
+## バトル画面の上の見出しの幅（左右の機体の板にかぶらない幅）
+const BATTLE_HEADER_WIDTH: float = 480.0
+## 自分の試合が終わったときの「FINISH」：文字の大きさと色、押し込む前の大きさ（倍）、押し込む・見せておく・消える秒数
+const FINISH_FONT: int = 140
+const FINISH_COLOR := Color(1.0, 0.82, 0.35)
+const FINISH_START_SCALE: float = 3.0
+const FINISH_SLAM_SEC: float = 0.3
+const FINISH_HOLD_SEC: float = 1.6
+const FINISH_FADE_SEC: float = 0.5
+
 # ---- パーク選び（view/draft/perk_card.gd） ----
 ## パークの種類ごとの色。種類は効果の対象の先頭で決める（frame / weapon / skill / build は機体、prompt はプロンプト、pilot は操縦士）
 const PERK_GROUP_COLORS: Dictionary = {
 	"machine": Color(0.62, 0.66, 0.7), "prompt": Color(0.75, 0.55, 0.95), "pilot": Color(0.45, 0.85, 0.5),
 }
 const PERK_CARD_SIZE := Vector2(300, 250)
-## 配られたパーツを1枚ずつめくる間隔（秒）とめくる速さ（秒）
-const DEAL_STAGGER_SEC: float = 0.12
-const DEAL_FLIP_SEC: float = 0.18
+## 配られたパーツを1枚ずつ画面の中央に大きく見せてから、下の列の場所へ縮めて送る（view/draft/loot_screen.gd）
+## 中央での大きさ（倍）、現れる・見せておく・列へ飛ぶ時間（秒）、後ろを暗くする濃さ
+const LOOT_SHOW_SCALE: float = 1.8
+const LOOT_POP_SEC: float = 0.25
+const LOOT_HOLD_SEC: float = 0.5
+const LOOT_FLY_SEC: float = 0.3
+const LOOT_DIM_ALPHA: float = 0.6
 ## 残り時間の導火線（view/fuse_bar.gd）。この秒数を切ったら、先端が赤くなり、火花が増え、縄が震える
 const FUSE_WARN_SEC: float = 5.0
 ## 縄の太さ（点）、縄の地の色と縞の色、焦げ跡の色

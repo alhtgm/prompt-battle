@@ -39,16 +39,19 @@ func build_ui() -> void:
 		carousels[kind] = c
 		if c.current() != null:
 			picks[kind] = c.current().uid
-	add_label(" ", 4, COL_DIM, left)
-	# 決定ボタンと、うまくいかなかったときの文字
-	var bottom := HBoxContainer.new()
-	bottom.add_theme_constant_override("separation", 16)
+	# 段と決定ボタンの間を少し空ける
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 28)
+	left.add_child(gap)
+	# 決定ボタンと、うまくいかなかったときの文字。ボタンは真ん中のカードと同じ横位置（列の中央）に置き、文字はその下に出す
+	var bottom := VBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 6)
 	left.add_child(bottom)
 	_confirm = add_button("決定", confirm, bottom)
 	_confirm.custom_minimum_size = Vector2(200, 60)
+	_confirm.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_message = add_label("", 17, COL_BAD, bottom)
-	_message.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_message.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	build_preview = BuildPreview.new()
 	cols[1].add_child(build_preview)
 	build_preview.setup(main.data)

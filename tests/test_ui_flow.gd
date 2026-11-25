@@ -27,10 +27,25 @@ func _is(screen: Node, script: GDScript) -> bool:
 	return screen != null and screen.get_script() == script
 
 
+## 画面の中身が、スクロールなしで画面（プロジェクトの基準の大きさ）に収まっているか
+func _check_fits(screen: Control, what: String) -> void:
+	var limit := Vector2(float(ProjectSettings.get_setting("display/window/size/viewport_width")),
+		float(ProjectSettings.get_setting("display/window/size/viewport_height")))
+	var need: Vector2 = screen.get_combined_minimum_size()
+	check(need.x <= limit.x + 0.5 and need.y <= limit.y + 0.5,
+		"%s が画面に収まる（必要 %d×%d / 画面 %d×%d）" % [what, need.x, need.y, limit.x, limit.y])
+
+
 ## 段階5の完成の目安：自分の試合を3Dで観戦でき、操縦士の今の方針と一言が見える
 func _check_battle_screen(b: Node, main: Node) -> void:
 	var r: int = main.session.round_no
 	check(b.header.text.contains("ラウンド %d" % r), "ラウンド %d：バトル画面にラウンドが出る" % r)
+	# 上の見出し（操縦士の状態が長くても）は、左右の機体の板にかぶらない
+	b.brain_label.text = "操縦士：仮の頭脳（llama-server が見つからない（tools/fetch_llm.ps1 で取れる））"
+	var top_r: Rect2 = b.header.get_parent().get_parent().get_global_rect()
+	for i: int in 2:
+		var side_r: Rect2 = b.side_names[i].get_parent().get_parent().get_global_rect()
+		check(not top_r.intersects(side_r), "ラウンド %d：見出しが機体 %d の板にかぶらない" % [r, i])
 	var me_alive: bool = main.session.get_player(0).alive
 	var mine: Variant = main.session.battle_of(0)
 	if me_alive:
@@ -66,10 +81,12 @@ func test_play_through_from_title_to_final_ranking() -> void:
 	tree.root.add_child(main)
 	await _frame()
 	check(_is(main.screen, TitleScreen), "最初はタイトル画面")
+	_check_fits(main.screen, "タイトル画面")
 
 	main.start_game(31337)
 	await _frame()
 	check(_is(main.screen, DraftScreen), "はじめるとパーツ選び")
+	_check_fits(main.screen, "パーツ選びの画面")
 	var draft: Node = main.screen
 	check(not draft._confirm.disabled, "最初から各種類の1枚目が選ばれていて決定できる")
 	for kind: String in ["frame", "weapon", "skill"]:
@@ -101,6 +118,19 @@ func test_play_through_from_title_to_final_ranking() -> void:
 						g.set_selection(frame, weapons, [])
 						check(not g.confirm().is_empty(), "枠を超える武器では出撃できない")
 					g.set_selection(frame, weapons.slice(0, 1), [])
+					check_eq(g.carousels["frame"].current_uid(), frame, "フレームの段の真ん中が選んだフレーム")
+					check_eq(g.carousels["weapon:0"].current_uid(), weapons[0], "武器1の段の真ん中が選んだ武器")
+					if g.carousels.has("weapon:1") and weapons.size() >= 2:
+						# ほかの枠で付けている武器は、その段の候補に出ない（同じものを2つ付けられない）
+						var uids_of := func(c: Node) -> Array:
+							return c.parts.map(func(pp: Variant) -> int: return pp.uid if pp != null else -1)
+						check(not uids_of.call(g.carousels["weapon:1"]).has(weapons[0]), "武器1で付けた武器は武器2の候補に出ない")
+						g.carousels["weapon:1"].select_uid(weapons[1])
+						g.carousels["weapon:1"].picked.emit("weapon", weapons[1])
+						check(not uids_of.call(g.carousels["weapon:0"]).has(weapons[1]), "武器2で選ぶと武器1の候補から外れる")
+						check_eq(g.carousels["weapon:0"].current_uid(), weapons[0], "武器1の選んだものはそのまま")
+						check_eq(g.weapon_uids, [weapons[0], weapons[1]] as Array[int], "2つの枠に別々の武器が付く")
+						g.set_selection(frame, weapons.slice(0, 1), [])
 					g.set_prompt("相手が穴の近くに来たら穴に押し込め。それ以外は突撃しろ")
 					check_eq(g.confirm(), "", "正しい機体なら出撃できる")
 			MatchSession.PHASE_BATTLE:
@@ -109,6 +139,12 @@ func test_play_through_from_title_to_final_ranking() -> void:
 				await _frame()
 				b.refresh()
 				_check_battle_screen(b, main)
+				var mine_b: Variant = main.session.battle_of(0)
+				if mine_b != null and b.watched_battle == mine_b:
+					check(not b.finish_label.visible, "試合中は FINISH を出さない")
+					mine_b.sim.run_to_end()
+					b.refresh()
+					check(b.finish_label.visible, "自分の試合が終わると FINISH が大きく出る")
 				b.skip()
 			MatchSession.PHASE_ROUND_RESULT:
 				main.screen.next()
@@ -123,6 +159,7 @@ func test_play_through_from_title_to_final_ranking() -> void:
 	for phase: String in ["build", "battle", "round_result", "loot"]:
 		check(visited.has(phase), "段階 %s を通った" % phase)
 	check(_is(main.screen, FinalScreen), "最後は最終順位の画面")
+	_check_fits(main.screen, "最終順位の画面")
 	check(me.place >= 1 and me.place <= 6, "自分の順位が決まる（%d位）" % me.place)
 	main.screen.play_again()
 	await _frame()
@@ -276,14 +313,44 @@ func test_result_loot_and_final_screens() -> void:
 	await _frame()
 	var saw_lose: bool = false
 	var saw_loot: bool = false
+	var fitted: Dictionary = {}
 	for k: int in 80:
 		var s: Variant = main.session
 		if s.phase == "finished":
 			break
+		if main.screen is Control:
+			_check_fits(main.screen, "段階 %s（ラウンド %d）の画面" % [s.phase, s.round_no])
 		match s.phase:
 			"build":
 				var g: Node = main.screen
 				check(_is(g, GarageScreen), "組み立ての画面")
+				var me_g: Variant = s.get_player(0)
+				if me_g.alive:
+					# 手持ちのどのフレームにしても（枠が多くて段が増えても）画面に収まる
+					for part: Variant in me_g.hand:
+						if part.kind == "frame" and not fitted.has(part.def_id):
+							fitted[part.def_id] = true
+							g.set_selection(part.uid, [], [])
+							g._fill_empty_slots()
+							g._build_sections()
+							g._update_info()
+							await _frame()
+							_check_fits(g, "組み立ての画面（%s）" % part.def_id)
+							check(g.weapon_uids.size() <= g._max_slots().x and g.skill_uids.size() <= g._max_slots().y,
+								"空いた枠は手持ちで埋めるが、枠は超えない")
+					# 段でフレームを替えていくと、武器・スキルの段は枠の数だけ出る（枠が0なら出ない）。付けている数も枠を超えない
+					for part: Variant in me_g.hand:
+						if part.kind != "frame":
+							continue
+						g.carousels["frame"].select_uid(part.uid)
+						g.carousels["frame"].picked.emit("frame", part.uid)
+						var slots: Vector2i = g._max_slots()
+						var n_w: int = g.carousels.keys().filter(func(k: String) -> bool: return k.begins_with("weapon:")).size()
+						var n_s: int = g.carousels.keys().filter(func(k: String) -> bool: return k.begins_with("skill:")).size()
+						check(n_w == slots.x and n_s == slots.y,
+							"%s：段は武器 %d・スキル %d（枠 %d・%d）" % [part.def_id, n_w, n_s, slots.x, slots.y])
+						check(g.weapon_uids.size() <= slots.x and g.skill_uids.size() <= slots.y,
+							"%s：付けている数が枠を超えない" % part.def_id)
 				check(g.fuse.visible and g.fuse.left > 0.0, "ひとりで遊ぶときも組み立てに残り時間のバーが出る")
 				var me_b: Variant = s.get_player(0)
 				if s.round_no >= 2 and me_b.alive:
@@ -333,6 +400,17 @@ func test_result_loot_and_final_screens() -> void:
 				check(not l.fuse.visible, "ひとりで遊ぶときは残り時間のバーを出さない")
 				if not saw_loot:
 					saw_loot = true
+					if not l.part_cards.is_empty():
+						await _frame()
+						check(l.showcase != null, "配られたパーツを中央に大きく見せる演出が始まる")
+						check(l.part_cards.all(func(c: Control) -> bool: return c.modulate.a < 0.01),
+							"演出の間は列のカードを隠しておく")
+						var skip := InputEventKey.new()
+						skip.keycode = KEY_SPACE
+						skip.pressed = true
+						l._unhandled_input(skip)
+						check(l.showcase == null and l.part_cards.all(func(c: Control) -> bool: return c.modulate.a > 0.99),
+							"キーで演出を飛ばすと、全部のカードが列に並ぶ")
 					l.part_cards[0].mouse_entered.emit()
 					check(l.tooltip.visible, "配られたパーツに合わせると吹き出しが出る")
 					var key := InputEventKey.new()

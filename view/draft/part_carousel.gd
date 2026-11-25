@@ -1,5 +1,6 @@
 # パーツ選びの1種類分の段。見出しと、真ん中に大きいカード・両脇に隣のカードがのぞく並びを持ち、◀▶で送る。
 # 真ん中に来たカードがそのまま選ばれる（picked を出す）。見出しに合わせると activated を出す（開くのは画面の役目）。
+# 組み立て画面では「なし（付けない）」のカードを最後に足せる（parts の中では null、uid は -1 として扱う）。
 extends VBoxContainer
 
 const GameData := preload("res://core/game_data.gd")
@@ -8,15 +9,20 @@ const PartCard := preload("res://view/draft/part_card.gd")
 const UiText := preload("res://view/ui_text.gd")
 const Look := preload("res://view/look.gd")
 
-## 真ん中に来たカード（選んだもの）が替わった
+## 真ん中に来たカード（選んだもの）が替わった（「なし」なら uid は -1）
 signal picked(kind: String, uid: int)
 ## 見出しにマウスを合わせた・押した
 signal activated(kind: String)
 
 var data: GameData
 var kind: String = ""
-## 候補のパーツ（PartInstance）
+## 候補のパーツ（PartInstance。「なし」のカードは null）
 var parts: Array = []
+## 見出しの名前（空なら種類の名前）
+var title: String = ""
+## 真ん中のカードの大きさと見出しの文字の大きさ（setup の前に変えられる。組み立て画面は小さめにする）
+var card_size: Vector2 = Look.DRAFT_CARD_SIZE
+var header_font: int = 22
 ## 真ん中にあるカードの番号（parts の中の位置）
 var index: int = 0
 var expanded: bool = true
@@ -33,16 +39,20 @@ var _open_tween: Tween = null
 var _laid_width: float = -1.0
 
 
-func setup(game_data: GameData, part_kind: String, offer: Array) -> void:
+## title は見出しの名前（空なら種類の名前）。allow_none なら最後に「なし」のカードを足す。
+## badges は uid → カードの右下の札（"NEW" など）
+func setup(game_data: GameData, part_kind: String, offer: Array, part_title: String = "",
+		allow_none: bool = false, badges: Dictionary = {}) -> void:
 	data = game_data
 	kind = part_kind
-	parts = offer
+	title = part_title
+	parts = offer + ([null] if allow_none else [])
 	add_theme_constant_override("separation", 4)
 	header = Button.new()
 	header.flat = true
 	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	header.focus_mode = Control.FOCUS_NONE
-	header.add_theme_font_size_override("font_size", 22)
+	header.add_theme_font_size_override("font_size", header_font)
 	header.mouse_entered.connect(func() -> void: activated.emit(kind))
 	header.pressed.connect(func() -> void: activated.emit(kind))
 	add_child(header)
@@ -56,13 +66,14 @@ func setup(game_data: GameData, part_kind: String, offer: Array) -> void:
 			_layout(false))
 	add_child(stage)
 	for p: Variant in parts:
-		var card: PartCard = PartCard.new()
+		var card: Button = _none_card() if p == null else PartCard.new()
 		stage.add_child(card)
-		card.setup(data, p, null)
+		if p != null:
+			card.setup(data, p, null, str(badges.get(p.uid, "")))
 		card.focus_mode = Control.FOCUS_NONE
-		card.custom_minimum_size = Look.DRAFT_CARD_SIZE
-		card.size = Look.DRAFT_CARD_SIZE
-		card.pivot_offset = Look.DRAFT_CARD_SIZE * 0.5
+		card.custom_minimum_size = card_size
+		card.size = card_size
+		card.pivot_offset = card_size * 0.5
 		card.pressed.connect(_on_card_pressed.bind(cards.size()))
 		cards.append(card)
 	prev_button = _arrow("◀", -1)
@@ -87,13 +98,19 @@ func step(dir: int) -> void:
 	index = posmod(index + dir, parts.size())
 	_update_header()
 	_layout(true)
-	picked.emit(kind, current().uid)
+	picked.emit(kind, current_uid())
 
 
-## uid のカードを真ん中にする（動かさずに置き直す。picked は出さない）
+## 今選んでいるパーツの uid（「なし」なら -1）
+func current_uid() -> int:
+	var p: PartInstance = current()
+	return p.uid if p != null else -1
+
+
+## uid のカードを真ん中にする（-1 なら「なし」。動かさずに置き直す。picked は出さない）
 func select_uid(uid: int) -> void:
 	for i: int in parts.size():
-		if parts[i].uid == uid:
+		if (parts[i].uid if parts[i] != null else -1) == uid:
 			index = i
 			_update_header()
 			_layout(false)
@@ -123,8 +140,8 @@ func set_expanded(on: bool, animate: bool = false) -> void:
 
 
 ## 開いたときの台の高さ
-static func _full_height() -> float:
-	return Look.DRAFT_CARD_SIZE.y + 12.0
+func _full_height() -> float:
+	return card_size.y + 12.0
 
 
 ## 真ん中からいくつ離れているか（輪にして、-n/2 〜 n/2 の範囲で数える）
@@ -141,7 +158,7 @@ func _on_card_pressed(i: int) -> void:
 
 
 func _update_header() -> void:
-	var kind_name: String = UiText.KIND_LABELS.get(kind, kind)
+	var kind_name: String = title if not title.is_empty() else UiText.KIND_LABELS.get(kind, kind)
 	var part_name: String = data.get_part(current().def_id).name if current() != null else "なし"
 	header.text = "%s %s：%s" % ["▼" if expanded else "▶", kind_name, part_name]
 	var col: Color = Look.KIND_COLORS.get(kind, Look.UI_ACCENT) if expanded else Color(0.62, 0.6, 0.55)
@@ -165,7 +182,8 @@ func _layout(animate: bool) -> void:
 		var card: Button = cards[i]
 		var d: int = offset_of(i)
 		var far: bool = absi(d) > 1
-		var pos: Vector2 = center + Vector2(float(d) * Look.DRAFT_SIDE_OFFSET, 0.0) - card.size * 0.5
+		var side: float = Look.DRAFT_SIDE_OFFSET * card_size.x / Look.DRAFT_CARD_SIZE.x  # 小さいカードでは隣も近づける
+		var pos: Vector2 = center + Vector2(float(d) * side, 0.0) - card.size * 0.5
 		var s: float = 1.0 if d == 0 else Look.DRAFT_SIDE_SCALE * (0.8 if far else 1.0)
 		var dim: float = 1.0 if d == 0 else Look.DRAFT_SIDE_DIM
 		var mod := Color(dim, dim, dim, 0.0 if far else 1.0)
@@ -179,6 +197,23 @@ func _layout(animate: bool) -> void:
 			card.position = pos
 			card.scale = Vector2(s, s)
 			card.modulate = mod
+
+
+## 「なし（付けない）」のカード
+func _none_card() -> Button:
+	var b := Button.new()
+	b.text = "なし
+（付けない）"
+	b.add_theme_font_size_override("font_size", 20)
+	b.add_theme_color_override("font_color", Look.UI_TEXT.darkened(0.3))
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.07, 0.065, 0.06)
+	st.border_color = Look.UI_BORDER
+	st.set_border_width_all(1)
+	st.set_corner_radius_all(2)
+	for state: String in ["normal", "hover", "pressed", "focus"]:
+		b.add_theme_stylebox_override(state, st)
+	return b
 
 
 ## 台の端に置く ◀▶ のボタン（両脇のカードの上に重なる）
