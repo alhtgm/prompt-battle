@@ -174,7 +174,11 @@ func test_draft_screen_carousel_preview_and_back() -> void:
 	check_eq(draft.active_kind, "weapon", "見出しに合わせるとその段が開く")
 	check(draft.carousels["weapon"].expanded and not draft.carousels["frame"].expanded and not draft.carousels["skill"].expanded,
 		"開いている段は武器だけ")
+	check(draft.carousels["weapon"].stage.visible and draft.carousels["weapon"].stage.custom_minimum_size.y < Look.DRAFT_CARD_SIZE.y,
+		"開くときは一瞬ではなく、少しずつ開く")
+	await tree.create_timer(Look.DRAFT_EXPAND_SEC + 0.15).timeout
 	check(not draft.carousels["frame"].stage.visible and draft.carousels["frame"].header.visible, "閉じた段は見出しの文字だけ見える")
+	check(draft.carousels["weapon"].stage.custom_minimum_size.y >= Look.DRAFT_CARD_SIZE.y, "開き終わるとカードの高さまで開く")
 	# ◀▶で送ると、真ん中に来たものが選ばれる（端は輪になる）
 	var weapons: Array = offer["weapon"]
 	var wc: Node = draft.carousels["weapon"]

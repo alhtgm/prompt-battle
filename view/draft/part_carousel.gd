@@ -27,6 +27,10 @@ var next_button: Button
 ## カードを並べる台（閉じると隠す）
 var stage: Control
 var _tween: Tween = null
+## 開く・閉じる動き
+var _open_tween: Tween = null
+## 前に並べたときの台の幅（高さだけ変わったときは並べ直さない）
+var _laid_width: float = -1.0
 
 
 func setup(game_data: GameData, part_kind: String, offer: Array) -> void:
@@ -45,9 +49,11 @@ func setup(game_data: GameData, part_kind: String, offer: Array) -> void:
 
 	stage = Control.new()
 	stage.clip_contents = true
-	stage.custom_minimum_size = Vector2(0, Look.DRAFT_CARD_SIZE.y + 12.0)
+	stage.custom_minimum_size = Vector2(0, _full_height())
 	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stage.resized.connect(func() -> void: _layout(false))
+	stage.resized.connect(func() -> void:
+		if not is_equal_approx(stage.size.x, _laid_width):
+			_layout(false))
 	add_child(stage)
 	for p: Variant in parts:
 		var card: PartCard = PartCard.new()
@@ -94,11 +100,31 @@ func select_uid(uid: int) -> void:
 			return
 
 
-## 開く（カードを見せる）・閉じる（見出しの文字だけにする）
-func set_expanded(on: bool) -> void:
+## 開く（カードを見せる）・閉じる（見出しの文字だけにする）。animate なら台の高さと濃さを少しずつ変える
+func set_expanded(on: bool, animate: bool = false) -> void:
 	expanded = on
-	stage.visible = on
 	_update_header()
+	if _open_tween != null:
+		_open_tween.kill()
+		_open_tween = null
+	var h: float = _full_height() if on else 0.0
+	var a: float = 1.0 if on else 0.0
+	if not animate:
+		stage.visible = on
+		stage.custom_minimum_size.y = h
+		stage.modulate.a = a
+		return
+	stage.visible = true
+	_open_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_open_tween.tween_property(stage, "custom_minimum_size:y", h, Look.DRAFT_EXPAND_SEC)
+	_open_tween.tween_property(stage, "modulate:a", a, Look.DRAFT_EXPAND_SEC)
+	if not on:
+		_open_tween.chain().tween_callback(func() -> void: stage.visible = false)
+
+
+## 開いたときの台の高さ
+static func _full_height() -> float:
+	return Look.DRAFT_CARD_SIZE.y + 12.0
 
 
 ## 真ん中からいくつ離れているか（輪にして、-n/2 〜 n/2 の範囲で数える）
@@ -130,7 +156,9 @@ func _layout(animate: bool) -> void:
 	if _tween != null:
 		_tween.kill()
 		_tween = null
-	var center: Vector2 = stage.size * 0.5
+	# 縦の真ん中は開いたときの高さで決める（開く途中でカードが上下に動かず、上から現れるように）
+	_laid_width = stage.size.x
+	var center := Vector2(stage.size.x * 0.5, _full_height() * 0.5)
 	if animate:
 		_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	for i: int in cards.size():

@@ -52,17 +52,17 @@ func build_ui() -> void:
 	build_preview = BuildPreview.new()
 	cols[1].add_child(build_preview)
 	build_preview.setup(main.data)
-	activate(GameData.KINDS[0])
+	activate(GameData.KINDS[0], false)
 	_refresh()
 
 
-## kind の段だけを開き、ほかは見出しの文字だけにする
-func activate(kind: String) -> void:
-	if not carousels.has(kind):
+## kind の段だけを開き、ほかは見出しの文字だけにする（animate なら少しずつ開閉する）
+func activate(kind: String, animate: bool = true) -> void:
+	if not carousels.has(kind) or (kind == active_kind and animate):
 		return
 	active_kind = kind
 	for k: String in carousels:
-		carousels[k].set_expanded(k == kind)
+		carousels[k].set_expanded(k == kind, animate)
 
 
 ## 開いている段のカードを送る（+1 で右、-1 で左）

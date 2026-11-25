@@ -95,6 +95,8 @@ const DRAFT_SIDE_OFFSET: float = 210.0
 const DRAFT_SIDE_DIM: float = 0.45
 ## カードを送るときに滑らせる秒数
 const DRAFT_SLIDE_SEC: float = 0.18
+## 種類の段を開く・閉じるのにかける秒数
+const DRAFT_EXPAND_SEC: float = 0.22
 ## ◀▶の色と、ボタンの幅
 const DRAFT_ARROW_COLOR := Color(0.75, 0.36, 0.05)
 const DRAFT_ARROW_WIDTH: float = 44.0
