@@ -71,7 +71,7 @@ func test_play_through_from_title_to_final_ranking() -> void:
 	await _frame()
 	check(_is(main.screen, DraftScreen), "はじめるとパーツ選び")
 	var draft: Node = main.screen
-	check(not draft.confirm().is_empty(), "全部選ぶ前は決定できない")
+	check(not draft._confirm.disabled, "最初から各種類の1枚目が選ばれていて決定できる")
 	for kind: String in ["frame", "weapon", "skill"]:
 		draft.select(kind, main.session.draft_offer[kind][1].uid)
 	check_eq(draft.confirm(), "", "種類ごとに1つ選ぶと決定できる")
@@ -150,8 +150,8 @@ func test_play_through_from_title_to_final_ranking() -> void:
 	await _frame()
 
 
-## パーツ選びの画面：カードで選ぶと「選択中」と構成の欄に出る、合わせると吹き出しが出る、タイトルへ戻れる
-func test_draft_screen_cards_summary_tooltip_and_back() -> void:
+## パーツ選びの画面：種類ごとの段を◀▶で送ると選ばれる、開く段は1つ、右に組んだ機体と性能が出る、タイトルへ戻れる
+func test_draft_screen_carousel_preview_and_back() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var main: Node = load("res://view/main.tscn").instantiate()
 	main.use_llm = false
@@ -164,23 +164,60 @@ func test_draft_screen_cards_summary_tooltip_and_back() -> void:
 	var draft: Node = main.screen
 	check(_is(draft, DraftScreen), "パーツ選びの画面")
 	var offer: Dictionary = main.session.draft_offer
-	check_eq(draft.cards.size(), offer["frame"].size() + offer["weapon"].size() + offer["skill"].size(), "候補ごとにカードがある")
-	check(draft.summary_labels["weapon"][0].text.contains("未選択"), "選ぶ前の構成の欄は未選択")
-	var weapon: Variant = offer["weapon"][2]
-	var card: Button = draft.cards[weapon.uid]
-	card.button_pressed = true  # カードを押したのと同じ
-	check_eq(draft.picks.get("weapon", -1), weapon.uid, "カードを押すと選ばれる")
-	var weapon_name: String = main.data.get_part(weapon.def_id).name
-	check(draft.summary_labels["weapon"][0].text.contains(weapon_name), "構成の欄に選んだ武器の名前が出る")
-	draft.select("weapon", offer["weapon"][0].uid)
-	check(not card.button_pressed and draft.cards[offer["weapon"][0].uid].button_pressed, "同じ種類は1つだけ選ばれる")
-	card.mouse_entered.emit()  # マウスを合わせたのと同じ
-	check(draft.tooltip.visible and draft.tooltip.part == weapon, "合わせると吹き出しが出る")
-	check(draft.tooltip.name_label.text == weapon_name, "吹き出しにパーツの名前が出る")
-	check(not draft.tooltip.desc_label.text.is_empty(), "吹き出しに効果の説明が出る")
-	check(draft.tooltip.preview.robot != null, "吹き出しに見本の機体がある")
-	card.mouse_exited.emit()
-	check(not draft.tooltip.visible, "離れると吹き出しが消える")
+	for kind: String in ["frame", "weapon", "skill"]:
+		check_eq(draft.carousels[kind].cards.size(), offer[kind].size(), "%s：候補ごとにカードがある" % kind)
+		check_eq(draft.picks.get(kind, -1), offer[kind][0].uid, "%s：最初は1枚目が選ばれている" % kind)
+	# 開いている段は1つだけ
+	check(draft.carousels["frame"].expanded and not draft.carousels["weapon"].expanded and not draft.carousels["skill"].expanded,
+		"最初はフレームの段だけ開いている")
+	draft.carousels["weapon"].header.mouse_entered.emit()  # 武器の見出しにマウスを合わせたのと同じ
+	check_eq(draft.active_kind, "weapon", "見出しに合わせるとその段が開く")
+	check(draft.carousels["weapon"].expanded and not draft.carousels["frame"].expanded and not draft.carousels["skill"].expanded,
+		"開いている段は武器だけ")
+	check(not draft.carousels["frame"].stage.visible and draft.carousels["frame"].header.visible, "閉じた段は見出しの文字だけ見える")
+	# ◀▶で送ると、真ん中に来たものが選ばれる（端は輪になる）
+	var weapons: Array = offer["weapon"]
+	var wc: Node = draft.carousels["weapon"]
+	wc.next_button.pressed.emit()
+	check_eq(draft.picks["weapon"], weapons[1].uid, "▶で次の武器が選ばれる")
+	var weapon_name: String = main.data.get_part(weapons[1].def_id).name
+	check(wc.header.text.contains(weapon_name), "見出しに選んだ武器の名前が出る")
+	check(draft.build_preview.name_labels["weapon"].text == weapon_name, "右の一覧に選んだ武器の名前が出る")
+	check(not draft.build_preview.desc_labels["weapon"].text.is_empty(), "右の一覧に効果の説明が出る")
+	check(draft.build_preview.stats_boxes["weapon"].get_child_count() > 0, "右の一覧にステータスが出る")
+	wc.prev_button.pressed.emit()
+	wc.prev_button.pressed.emit()
+	check_eq(draft.picks["weapon"], weapons[weapons.size() - 1].uid, "1枚目で◀を押すと最後の武器になる")
+	wc.next_button.pressed.emit()
+	check_eq(draft.picks["weapon"], weapons[0].uid, "最後で▶を押すと1枚目に戻る")
+	for i: int in 7:
+		wc.next_button.pressed.emit()  # 動きの途中で何度も送る
+	check_eq(draft.picks["weapon"], weapons[7 % weapons.size()].uid, "続けて送っても選択がずれない")
+	wc.cards[posmod(wc.index - 1, weapons.size())].pressed.emit()
+	check_eq(draft.picks["weapon"], weapons[6 % weapons.size()].uid, "左にのぞくカードを押すと1つ戻る")
+	# キーボード：→で送る、↓で次の段が開く
+	var key := InputEventKey.new()
+	key.keycode = KEY_RIGHT
+	key.pressed = true
+	draft._input(key)
+	check_eq(draft.picks["weapon"], weapons[7 % weapons.size()].uid, "→キーで送れる")
+	key.keycode = KEY_DOWN
+	draft._input(key)
+	check_eq(draft.active_kind, "skill", "↓キーで次の段が開く")
+	draft._input(key)
+	check_eq(draft.active_kind, "skill", "いちばん下で↓を押しても段は替わらない")
+	# 見本の機体は選んだ構成で、フレームの枠を超えるパーツは付けない
+	for f: Variant in offer["frame"]:
+		draft.select("frame", f.uid)
+		var fdef: Variant = main.data.get_part(f.def_id)
+		var b: Variant = draft.build_preview.build
+		check_eq(b.frame.def_id, f.def_id, "%s：見本は選んだフレーム" % fdef.name)
+		check_eq(b.validate(main.data), "", "%s：見本はフレームの枠に収まっている" % fdef.name)
+		check_eq(b.skills.size(), mini(1, fdef.skill_slots), "%s：スキルは枠があるときだけ付く" % fdef.name)
+		check_eq(draft.build_preview.note_labels["skill"].visible, fdef.skill_slots == 0, "%s：スキルの枠がないと注意書きが出る" % fdef.name)
+		if fdef.weapon_slots > 0:
+			check_eq(b.weapons[0].def_id, main.data.get_part(draft.carousels["weapon"].current().def_id).id, "%s：見本に選んだ武器が付く" % fdef.name)
+	check(draft.build_preview.preview.robot != null, "右に見本の機体がある")
 	draft.back_button.pressed.emit()
 	await _frame()
 	check(_is(main.screen, TitleScreen) and main.session == null, "戻るボタンでタイトルに戻る")

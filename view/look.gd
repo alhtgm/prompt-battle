@@ -87,6 +87,25 @@ const PREVIEW_STAGE: Dictionary = {
 ## 見本の大きさ（画面上の点）と、何分の1の解像度で描くか
 const PREVIEW_SIZE := Vector2(300, 170)
 const PREVIEW_SHRINK: int = 2
+# ---- パーツ選び（view/draft/part_carousel.gd・build_preview.gd） ----
+## 真ん中のカードの大きさ、両脇のカードの縮み具合と真ん中からのずれ（点）、暗さ
+const DRAFT_CARD_SIZE := Vector2(300, 150)
+const DRAFT_SIDE_SCALE: float = 0.8
+const DRAFT_SIDE_OFFSET: float = 210.0
+const DRAFT_SIDE_DIM: float = 0.45
+## カードを送るときに滑らせる秒数
+const DRAFT_SLIDE_SEC: float = 0.18
+## ◀▶の色と、ボタンの幅
+const DRAFT_ARROW_COLOR := Color(0.75, 0.36, 0.05)
+const DRAFT_ARROW_WIDTH: float = 44.0
+## 右側の組んだ機体の見本：大きさ（点）・何分の1で描くか・カメラ
+const DRAFT_PREVIEW_SIZE := Vector2(480, 180)
+const DRAFT_PREVIEW_SHRINK: int = 2
+const DRAFT_PREVIEW_STAGE: Dictionary = {
+	"camera": Vector3(0, 2.0, 4.6), "target": Vector3(0, 0.55, 0), "fov": 38.0,
+	"spin_deg_per_sec": 30.0, "floor": true,
+}
+
 ## パーツの種類ごとの目印の色（カードの帯と吹き出しの札）
 const KIND_COLORS: Dictionary = {
 	"frame": Color(0.62, 0.66, 0.7), "weapon": Color(0.95, 0.45, 0.28), "skill": Color(0.35, 0.85, 0.95),
