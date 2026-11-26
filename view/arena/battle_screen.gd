@@ -7,6 +7,7 @@ const UiText := preload("res://view/ui_text.gd")
 const ArenaView := preload("res://view/arena/arena_view.gd")
 const Look := preload("res://view/look.gd")
 const PostOverlay := preload("res://view/post_overlay.gd")
+const BattleHpBar := preload("res://view/arena/battle_hp_bar.gd")
 
 const LOG_LINES: int = 6
 ## 頭上の文字どうしの最小のすき間（ピクセル）
@@ -20,10 +21,15 @@ var main: Node
 var arena: Node3D
 var watched_battle: Variant = null
 var header: Label
+## 操縦士の頭脳の状態（長くなることがあるので、見出しとは分けて小さく折り返す）
+var brain_label: Label
+## 自分の試合が終わったときに真ん中に大きく出す「FINISH」（出していなければ隠す）
+var finish_label: Label
+var _finish_shown: bool = false
 var side_names: Array[Label] = []
 var side_intents: Array[Label] = []
 var side_says: Array[Label] = []
-var side_bars: Array[ProgressBar] = []
+var side_bars: Array[BattleHpBar] = []
 var side_prompts: Array[Label] = []
 var log_label: Label
 var others_label: Label
@@ -73,11 +79,21 @@ func build_ui() -> void:
 
 	# 上：見出しと操作
 	var top: VBoxContainer = _panel(Control.PRESET_CENTER_TOP, Vector2(0, 12), false)
+	# 見出しは左右の機体の板の間に収める（長い文字は折り返し、板にかぶらないようにする）
 	header = _label(top, "", 22, COL_TEXT)
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	header.custom_minimum_size = Vector2(Look.BATTLE_HEADER_WIDTH, 0)
+	brain_label = _label(top, "", 14, COL_DIM)
+	brain_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	brain_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	brain_label.custom_minimum_size = Vector2(Look.BATTLE_HEADER_WIDTH, 0)
+	# ボタンが見出しの幅に収まらないとき（開発用のボタンが増えたとき）は折り返し、左右の機体の板にかぶらないようにする
+	var row := HFlowContainer.new()
+	row.alignment = FlowContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("h_separation", 8)
+	row.add_theme_constant_override("v_separation", 4)
+	row.custom_minimum_size = Vector2(Look.BATTLE_HEADER_WIDTH, 0)
 	top.add_child(row)
 	row.visible = not main.session.is_online()  # 通信対戦では、速さはサーバーが決める
 	var specs: Array = [["1倍", set_speed.bind(1.0)], ["4倍", set_speed.bind(4.0)], ["最後まで飛ばす", skip]]
@@ -94,15 +110,17 @@ func build_ui() -> void:
 	if OS.is_debug_build():
 		dev_camera_hint = _label(top, "", 13, COL_DIM)
 		dev_camera_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		# 見出しと同じ幅で折り返し、左右の機体の板にかぶらないようにする
+		dev_camera_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		dev_camera_hint.custom_minimum_size = Vector2(Look.BATTLE_HEADER_WIDTH, 0)
 
 	# 左上・右上：両機体
 	for i: int in 2:
 		var preset: int = Control.PRESET_TOP_LEFT if i == 0 else Control.PRESET_TOP_RIGHT
 		var p: VBoxContainer = _panel(preset, Vector2(16, 12), true)
 		side_names.append(_label(p, "", 22, SIDE_COLORS[i]))
-		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(300, 14)
-		bar.show_percentage = false
+		var bar: BattleHpBar = BattleHpBar.new()
+		bar.setup(SIDE_COLORS[i], i == 1)
 		p.add_child(bar)
 		side_bars.append(bar)
 		side_intents.append(_label(p, "", 18, COL_TEXT))
@@ -120,8 +138,40 @@ func build_ui() -> void:
 	_label(bottom_right, "ほかの試合", 15, COL_DIM)
 	others_label = _label(bottom_right, "", 15, COL_DIM)
 	_build_llm_panel()
+	_build_finish_label()
 	_fill_prompts()
 	refresh()
+
+
+## 「FINISH」の文字（画面の真ん中。最初は隠しておく）
+func _build_finish_label() -> void:
+	finish_label = Label.new()
+	finish_label.text = "FINISH"
+	finish_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	finish_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	finish_label.add_theme_font_size_override("font_size", Look.FINISH_FONT)
+	finish_label.add_theme_color_override("font_color", Look.FINISH_COLOR)
+	finish_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	finish_label.add_theme_constant_override("outline_size", 18)
+	finish_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	finish_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	finish_label.visible = false
+	add_child(finish_label)
+
+
+## 自分の試合が終わったら1回だけ、「FINISH」を大きくドンと出し、少し見せてから消す
+func _show_finish() -> void:
+	_finish_shown = true
+	finish_label.visible = true
+	finish_label.pivot_offset = size * 0.5
+	finish_label.scale = Vector2.ONE * Look.FINISH_START_SCALE
+	finish_label.modulate = Color(1, 1, 1, 0)
+	var tw: Tween = create_tween()
+	tw.tween_property(finish_label, "scale", Vector2.ONE, Look.FINISH_SLAM_SEC).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(finish_label, "modulate:a", 1.0, Look.FINISH_SLAM_SEC * 0.5)
+	tw.tween_interval(Look.FINISH_HOLD_SEC)
+	tw.tween_property(finish_label, "modulate:a", 0.0, Look.FINISH_FADE_SEC)
+	tw.tween_callback(func() -> void: finish_label.visible = false)
 
 
 ## 開発用の板：右の真ん中に、本番の頭脳への問い合わせを新しい順に並べる
@@ -383,8 +433,11 @@ func refresh() -> void:
 	var names: Array = [sim.robots[0].name, sim.robots[1].name]
 	var spectating: String = "（観戦中）" if not s.get_player(main.human_id).alive else ""
 	var speed_text: String = "一時停止中" if main.dev_paused else "%s倍" % main.battle_speed
-	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s）\n%s" % [
-		s.round_no, spectating, sim.now(), sim.time_left(), speed_text, main.agents.brain_status_text()]
+	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s）" % [
+		s.round_no, spectating, sim.now(), sim.time_left(), speed_text]
+	brain_label.text = main.agents.brain_status_text()
+	if sim.over and not _finish_shown and s.battle_of(main.human_id) == watched_battle:
+		_show_finish()
 	if sim.over:
 		var w: int = int(sim.result["winner"])
 		var all_over: bool = float(s.get("battle_end_left")) >= 0.0 if "battle_end_left" in s else false
@@ -397,8 +450,7 @@ func refresh() -> void:
 		if float(r.get("fuse")) >= 0.0:
 			state += "　自爆まで %.1f 秒！" % float(r.get("fuse"))
 		side_names[i].text = "%s　HP %d / %d" % [r.name, roundi(r.hp), roundi(r.max_hp)]
-		side_bars[i].max_value = r.max_hp
-		side_bars[i].value = r.hp
+		side_bars[i].set_hp(r.hp, r.max_hp)
 		side_intents[i].text = "方針：%s" % state
 		side_says[i].text = "「%s」" % r.say if not r.say.is_empty() else ""
 	var lines: PackedStringArray = PackedStringArray()

@@ -27,10 +27,25 @@ func _is(screen: Node, script: GDScript) -> bool:
 	return screen != null and screen.get_script() == script
 
 
+## 画面の中身が、スクロールなしで画面（プロジェクトの基準の大きさ）に収まっているか
+func _check_fits(screen: Control, what: String) -> void:
+	var limit := Vector2(float(ProjectSettings.get_setting("display/window/size/viewport_width")),
+		float(ProjectSettings.get_setting("display/window/size/viewport_height")))
+	var need: Vector2 = screen.get_combined_minimum_size()
+	check(need.x <= limit.x + 0.5 and need.y <= limit.y + 0.5,
+		"%s が画面に収まる（必要 %d×%d / 画面 %d×%d）" % [what, need.x, need.y, limit.x, limit.y])
+
+
 ## 段階5の完成の目安：自分の試合を3Dで観戦でき、操縦士の今の方針と一言が見える
 func _check_battle_screen(b: Node, main: Node) -> void:
 	var r: int = main.session.round_no
 	check(b.header.text.contains("ラウンド %d" % r), "ラウンド %d：バトル画面にラウンドが出る" % r)
+	# 上の見出し（操縦士の状態が長くても）は、左右の機体の板にかぶらない
+	b.brain_label.text = "操縦士：仮の頭脳（llama-server が見つからない（tools/fetch_llm.ps1 で取れる））"
+	var top_r: Rect2 = b.header.get_parent().get_parent().get_global_rect()
+	for i: int in 2:
+		var side_r: Rect2 = b.side_names[i].get_parent().get_parent().get_global_rect()
+		check(not top_r.intersects(side_r), "ラウンド %d：見出しが機体 %d の板にかぶらない" % [r, i])
 	var me_alive: bool = main.session.get_player(0).alive
 	var mine: Variant = main.session.battle_of(0)
 	if me_alive:
@@ -66,12 +81,14 @@ func test_play_through_from_title_to_final_ranking() -> void:
 	tree.root.add_child(main)
 	await _frame()
 	check(_is(main.screen, TitleScreen), "最初はタイトル画面")
+	_check_fits(main.screen, "タイトル画面")
 
 	main.start_game(31337)
 	await _frame()
 	check(_is(main.screen, DraftScreen), "はじめるとパーツ選び")
+	_check_fits(main.screen, "パーツ選びの画面")
 	var draft: Node = main.screen
-	check(not draft.confirm().is_empty(), "全部選ぶ前は決定できない")
+	check(not draft._confirm.disabled, "最初から各種類の1枚目が選ばれていて決定できる")
 	for kind: String in ["frame", "weapon", "skill"]:
 		draft.select(kind, main.session.draft_offer[kind][1].uid)
 	check_eq(draft.confirm(), "", "種類ごとに1つ選ぶと決定できる")
@@ -101,6 +118,19 @@ func test_play_through_from_title_to_final_ranking() -> void:
 						g.set_selection(frame, weapons, [])
 						check(not g.confirm().is_empty(), "枠を超える武器では出撃できない")
 					g.set_selection(frame, weapons.slice(0, 1), [])
+					check_eq(g.carousels["frame"].current_uid(), frame, "フレームの段の真ん中が選んだフレーム")
+					check_eq(g.carousels["weapon:0"].current_uid(), weapons[0], "武器1の段の真ん中が選んだ武器")
+					if g.carousels.has("weapon:1") and weapons.size() >= 2:
+						# ほかの枠で付けている武器は、その段の候補に出ない（同じものを2つ付けられない）
+						var uids_of := func(c: Node) -> Array:
+							return c.parts.map(func(pp: Variant) -> int: return pp.uid if pp != null else -1)
+						check(not uids_of.call(g.carousels["weapon:1"]).has(weapons[0]), "武器1で付けた武器は武器2の候補に出ない")
+						g.carousels["weapon:1"].select_uid(weapons[1])
+						g.carousels["weapon:1"].picked.emit("weapon", weapons[1])
+						check(not uids_of.call(g.carousels["weapon:0"]).has(weapons[1]), "武器2で選ぶと武器1の候補から外れる")
+						check_eq(g.carousels["weapon:0"].current_uid(), weapons[0], "武器1の選んだものはそのまま")
+						check_eq(g.weapon_uids, [weapons[0], weapons[1]] as Array[int], "2つの枠に別々の武器が付く")
+						g.set_selection(frame, weapons.slice(0, 1), [])
 					g.set_prompt("相手が穴の近くに来たら穴に押し込め。それ以外は突撃しろ")
 					check_eq(g.confirm(), "", "正しい機体なら出撃できる")
 			MatchSession.PHASE_BATTLE:
@@ -109,6 +139,12 @@ func test_play_through_from_title_to_final_ranking() -> void:
 				await _frame()
 				b.refresh()
 				_check_battle_screen(b, main)
+				var mine_b: Variant = main.session.battle_of(0)
+				if mine_b != null and b.watched_battle == mine_b:
+					check(not b.finish_label.visible, "試合中は FINISH を出さない")
+					mine_b.sim.run_to_end()
+					b.refresh()
+					check(b.finish_label.visible, "自分の試合が終わると FINISH が大きく出る")
 				b.skip()
 			MatchSession.PHASE_ROUND_RESULT:
 				main.screen.next()
@@ -123,6 +159,7 @@ func test_play_through_from_title_to_final_ranking() -> void:
 	for phase: String in ["build", "battle", "round_result", "loot"]:
 		check(visited.has(phase), "段階 %s を通った" % phase)
 	check(_is(main.screen, FinalScreen), "最後は最終順位の画面")
+	_check_fits(main.screen, "最終順位の画面")
 	check(me.place >= 1 and me.place <= 6, "自分の順位が決まる（%d位）" % me.place)
 	main.screen.play_again()
 	await _frame()
@@ -150,8 +187,8 @@ func test_play_through_from_title_to_final_ranking() -> void:
 	await _frame()
 
 
-## パーツ選びの画面：カードで選ぶと「選択中」と構成の欄に出る、合わせると吹き出しが出る、タイトルへ戻れる
-func test_draft_screen_cards_summary_tooltip_and_back() -> void:
+## パーツ選びの画面：種類ごとの段を◀▶で送ると選ばれる、開く段は1つ、右に組んだ機体と性能が出る、タイトルへ戻れる
+func test_draft_screen_carousel_preview_and_back() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var main: Node = load("res://view/main.tscn").instantiate()
 	main.use_llm = false
@@ -164,23 +201,64 @@ func test_draft_screen_cards_summary_tooltip_and_back() -> void:
 	var draft: Node = main.screen
 	check(_is(draft, DraftScreen), "パーツ選びの画面")
 	var offer: Dictionary = main.session.draft_offer
-	check_eq(draft.cards.size(), offer["frame"].size() + offer["weapon"].size() + offer["skill"].size(), "候補ごとにカードがある")
-	check(draft.summary_labels["weapon"][0].text.contains("未選択"), "選ぶ前の構成の欄は未選択")
-	var weapon: Variant = offer["weapon"][2]
-	var card: Button = draft.cards[weapon.uid]
-	card.button_pressed = true  # カードを押したのと同じ
-	check_eq(draft.picks.get("weapon", -1), weapon.uid, "カードを押すと選ばれる")
-	var weapon_name: String = main.data.get_part(weapon.def_id).name
-	check(draft.summary_labels["weapon"][0].text.contains(weapon_name), "構成の欄に選んだ武器の名前が出る")
-	draft.select("weapon", offer["weapon"][0].uid)
-	check(not card.button_pressed and draft.cards[offer["weapon"][0].uid].button_pressed, "同じ種類は1つだけ選ばれる")
-	card.mouse_entered.emit()  # マウスを合わせたのと同じ
-	check(draft.tooltip.visible and draft.tooltip.part == weapon, "合わせると吹き出しが出る")
-	check(draft.tooltip.name_label.text == weapon_name, "吹き出しにパーツの名前が出る")
-	check(not draft.tooltip.desc_label.text.is_empty(), "吹き出しに効果の説明が出る")
-	check(draft.tooltip.preview.robot != null, "吹き出しに見本の機体がある")
-	card.mouse_exited.emit()
-	check(not draft.tooltip.visible, "離れると吹き出しが消える")
+	for kind: String in ["frame", "weapon", "skill"]:
+		check_eq(draft.carousels[kind].cards.size(), offer[kind].size(), "%s：候補ごとにカードがある" % kind)
+		check_eq(draft.picks.get(kind, -1), offer[kind][0].uid, "%s：最初は1枚目が選ばれている" % kind)
+	# 開いている段は1つだけ
+	check(draft.carousels["frame"].expanded and not draft.carousels["weapon"].expanded and not draft.carousels["skill"].expanded,
+		"最初はフレームの段だけ開いている")
+	draft.carousels["weapon"].header.mouse_entered.emit()  # 武器の見出しにマウスを合わせたのと同じ
+	check_eq(draft.active_kind, "weapon", "見出しに合わせるとその段が開く")
+	check(draft.carousels["weapon"].expanded and not draft.carousels["frame"].expanded and not draft.carousels["skill"].expanded,
+		"開いている段は武器だけ")
+	check(draft.carousels["weapon"].stage.visible and draft.carousels["weapon"].stage.custom_minimum_size.y < Look.DRAFT_CARD_SIZE.y,
+		"開くときは一瞬ではなく、少しずつ開く")
+	await tree.create_timer(Look.DRAFT_EXPAND_SEC + 0.15).timeout
+	check(not draft.carousels["frame"].stage.visible and draft.carousels["frame"].header.visible, "閉じた段は見出しの文字だけ見える")
+	check(draft.carousels["weapon"].stage.custom_minimum_size.y >= Look.DRAFT_CARD_SIZE.y, "開き終わるとカードの高さまで開く")
+	# ◀▶で送ると、真ん中に来たものが選ばれる（端は輪になる）
+	var weapons: Array = offer["weapon"]
+	var wc: Node = draft.carousels["weapon"]
+	wc.next_button.pressed.emit()
+	check_eq(draft.picks["weapon"], weapons[1].uid, "▶で次の武器が選ばれる")
+	var weapon_name: String = main.data.get_part(weapons[1].def_id).name
+	check(wc.header.text.contains(weapon_name), "見出しに選んだ武器の名前が出る")
+	check(draft.build_preview.name_labels["weapon"].text == weapon_name, "右の一覧に選んだ武器の名前が出る")
+	check(not draft.build_preview.desc_labels["weapon"].text.is_empty(), "右の一覧に効果の説明が出る")
+	check(draft.build_preview.stats_boxes["weapon"].get_child_count() > 0, "右の一覧にステータスが出る")
+	wc.prev_button.pressed.emit()
+	wc.prev_button.pressed.emit()
+	check_eq(draft.picks["weapon"], weapons[weapons.size() - 1].uid, "1枚目で◀を押すと最後の武器になる")
+	wc.next_button.pressed.emit()
+	check_eq(draft.picks["weapon"], weapons[0].uid, "最後で▶を押すと1枚目に戻る")
+	for i: int in 7:
+		wc.next_button.pressed.emit()  # 動きの途中で何度も送る
+	check_eq(draft.picks["weapon"], weapons[7 % weapons.size()].uid, "続けて送っても選択がずれない")
+	wc.cards[posmod(wc.index - 1, weapons.size())].pressed.emit()
+	check_eq(draft.picks["weapon"], weapons[6 % weapons.size()].uid, "左にのぞくカードを押すと1つ戻る")
+	# キーボード：→で送る、↓で次の段が開く
+	var key := InputEventKey.new()
+	key.keycode = KEY_RIGHT
+	key.pressed = true
+	draft._input(key)
+	check_eq(draft.picks["weapon"], weapons[7 % weapons.size()].uid, "→キーで送れる")
+	key.keycode = KEY_DOWN
+	draft._input(key)
+	check_eq(draft.active_kind, "skill", "↓キーで次の段が開く")
+	draft._input(key)
+	check_eq(draft.active_kind, "skill", "いちばん下で↓を押しても段は替わらない")
+	# 見本の機体は選んだ構成で、フレームの枠を超えるパーツは付けない
+	for f: Variant in offer["frame"]:
+		draft.select("frame", f.uid)
+		var fdef: Variant = main.data.get_part(f.def_id)
+		var b: Variant = draft.build_preview.build
+		check_eq(b.frame.def_id, f.def_id, "%s：見本は選んだフレーム" % fdef.name)
+		check_eq(b.validate(main.data), "", "%s：見本はフレームの枠に収まっている" % fdef.name)
+		check_eq(b.skills.size(), mini(1, fdef.skill_slots), "%s：スキルは枠があるときだけ付く" % fdef.name)
+		check_eq(draft.build_preview.note_labels["skill"].visible, fdef.skill_slots == 0, "%s：スキルの枠がないと注意書きが出る" % fdef.name)
+		if fdef.weapon_slots > 0:
+			check_eq(b.weapons[0].def_id, main.data.get_part(draft.carousels["weapon"].current().def_id).id, "%s：見本に選んだ武器が付く" % fdef.name)
+	check(draft.build_preview.preview.robot != null, "右に見本の機体がある")
 	draft.back_button.pressed.emit()
 	await _frame()
 	check(_is(main.screen, TitleScreen) and main.session == null, "戻るボタンでタイトルに戻る")
@@ -235,14 +313,44 @@ func test_result_loot_and_final_screens() -> void:
 	await _frame()
 	var saw_lose: bool = false
 	var saw_loot: bool = false
+	var fitted: Dictionary = {}
 	for k: int in 80:
 		var s: Variant = main.session
 		if s.phase == "finished":
 			break
+		if main.screen is Control:
+			_check_fits(main.screen, "段階 %s（ラウンド %d）の画面" % [s.phase, s.round_no])
 		match s.phase:
 			"build":
 				var g: Node = main.screen
 				check(_is(g, GarageScreen), "組み立ての画面")
+				var me_g: Variant = s.get_player(0)
+				if me_g.alive:
+					# 手持ちのどのフレームにしても（枠が多くて段が増えても）画面に収まる
+					for part: Variant in me_g.hand:
+						if part.kind == "frame" and not fitted.has(part.def_id):
+							fitted[part.def_id] = true
+							g.set_selection(part.uid, [], [])
+							g._fill_empty_slots()
+							g._build_sections()
+							g._update_info()
+							await _frame()
+							_check_fits(g, "組み立ての画面（%s）" % part.def_id)
+							check(g.weapon_uids.size() <= g._max_slots().x and g.skill_uids.size() <= g._max_slots().y,
+								"空いた枠は手持ちで埋めるが、枠は超えない")
+					# 段でフレームを替えていくと、武器・スキルの段は枠の数だけ出る（枠が0なら出ない）。付けている数も枠を超えない
+					for part: Variant in me_g.hand:
+						if part.kind != "frame":
+							continue
+						g.carousels["frame"].select_uid(part.uid)
+						g.carousels["frame"].picked.emit("frame", part.uid)
+						var slots: Vector2i = g._max_slots()
+						var n_w: int = g.carousels.keys().filter(func(k: String) -> bool: return k.begins_with("weapon:")).size()
+						var n_s: int = g.carousels.keys().filter(func(k: String) -> bool: return k.begins_with("skill:")).size()
+						check(n_w == slots.x and n_s == slots.y,
+							"%s：段は武器 %d・スキル %d（枠 %d・%d）" % [part.def_id, n_w, n_s, slots.x, slots.y])
+						check(g.weapon_uids.size() <= slots.x and g.skill_uids.size() <= slots.y,
+							"%s：付けている数が枠を超えない" % part.def_id)
 				check(g.fuse.visible and g.fuse.left > 0.0, "ひとりで遊ぶときも組み立てに残り時間のバーが出る")
 				var me_b: Variant = s.get_player(0)
 				if s.round_no >= 2 and me_b.alive:
@@ -292,6 +400,17 @@ func test_result_loot_and_final_screens() -> void:
 				check(not l.fuse.visible, "ひとりで遊ぶときは残り時間のバーを出さない")
 				if not saw_loot:
 					saw_loot = true
+					if not l.part_cards.is_empty():
+						await _frame()
+						check(l.showcase != null, "配られたパーツを中央に大きく見せる演出が始まる")
+						check(l.part_cards.all(func(c: Control) -> bool: return c.modulate.a < 0.01),
+							"演出の間は列のカードを隠しておく")
+						var skip := InputEventKey.new()
+						skip.keycode = KEY_SPACE
+						skip.pressed = true
+						l._unhandled_input(skip)
+						check(l.showcase == null and l.part_cards.all(func(c: Control) -> bool: return c.modulate.a > 0.99),
+							"キーで演出を飛ばすと、全部のカードが列に並ぶ")
 					l.part_cards[0].mouse_entered.emit()
 					check(l.tooltip.visible, "配られたパーツに合わせると吹き出しが出る")
 					var key := InputEventKey.new()

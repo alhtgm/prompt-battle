@@ -1,5 +1,8 @@
 # 改行コードをそろえる
 * text=auto eol=lf
+# Windows の起動用スクリプトは CRLF（cmd が LF だけの bat を読み違えることがある）
+*.bat text eol=crlf
+*.ps1 text eol=crlf
 
 # 大きいファイルは Git LFS
 *.glb filter=lfs diff=lfs merge=lfs -text

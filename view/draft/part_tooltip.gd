@@ -148,10 +148,21 @@ func _fill(p: PartInstance, def: GameData.PartDef) -> void:
 	for c: Node in stats_box.get_children():
 		stats_box.remove_child(c)
 		c.queue_free()
+	add_stat_rows(stats_box, data, p, 17)
+	var fixed: PackedStringArray = UiText.part_fixed_lines(data, p)
+	if def.kind == GameData.KIND_FRAME:
+		fixed.insert(0, "武器%d・スキル%d" % [def.weapon_slots, def.skill_slots])
+	fixed_label.text = " / ".join(fixed)
+	fixed_label.visible = not fixed.is_empty()
+
+
+## grid（3列）に、ステータスごとに「値・抽選の幅のどこか（棒）・幅」の行を足す。パーツ選び画面の一覧でも使う
+static func add_stat_rows(grid: GridContainer, game_data: GameData, p: PartInstance, font_px: int) -> void:
+	var def: GameData.PartDef = game_data.get_part(p.def_id)
 	for stat: String in def.stat_names():
 		var v: float = p.get_stat(stat)
 		var r: GameData.StatRange = def.stats[stat]
-		_label(stats_box, UiText.stat_text(stat, v), 17, Look.UI_TEXT)
+		_static_label(grid, UiText.stat_text(stat, v), font_px, Look.UI_TEXT)
 		var bar := ProgressBar.new()
 		bar.custom_minimum_size = Vector2(90, 10)
 		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -163,14 +174,18 @@ func _fill(p: PartInstance, def: GameData.PartDef) -> void:
 		var fill := StyleBoxFlat.new()
 		fill.bg_color = COL_BAD.lerp(COL_GOOD, good)
 		bar.add_theme_stylebox_override("fill", fill)
-		stats_box.add_child(bar)
-		_label(stats_box, _span(stat, r), 13, COL_DIM)
-	var fixed: PackedStringArray = UiText.part_fixed_lines(data, p)
-	if def.kind == GameData.KIND_FRAME:
-		fixed.insert(0, "武器%d・スキル%d" % [def.weapon_slots, def.skill_slots])
-	fixed_label.text = " / ".join(fixed)
-	fixed_label.visible = not fixed.is_empty()
+		grid.add_child(bar)
+		_static_label(grid, _span(stat, r), font_px - 4, COL_DIM)
 
+
+static func _static_label(parent: Control, text: String, size_px: int, col: Color) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", size_px)
+	l.add_theme_color_override("font_color", col)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(l)
+	return l
 
 ## カードの右に置く。はみ出すなら左。縦はカードの真ん中に合わせ、画面からはみ出さないようにずらす
 func _place(rect: Rect2) -> void:

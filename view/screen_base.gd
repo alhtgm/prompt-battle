@@ -1,14 +1,17 @@
-# 画面の土台。余白つきの縦並びを用意し、見出し・文字・ボタンを足す手伝いをする。
+# 画面の土台。余白つきの縦並びを用意し、見出し・文字・ボタンを足す手伝いをする。スクロールはせず、1画面に収める。
 # 各画面はこれを継承し、build_ui() で中身を作る。試合の状態は main.session から読むだけにする。
 extends MarginContainer
 
 const UiText := preload("res://view/ui_text.gd")
 const Look := preload("res://view/look.gd")
+const KeyGuide := preload("res://view/key_guide.gd")
 
 const COL_TEXT := Look.UI_TEXT
 const COL_DIM := Color(0.55, 0.53, 0.48)
 const COL_ACCENT := Look.UI_ACCENT
 const COL_BAD := Color(0.95, 0.38, 0.3)
+## 画面の四辺の余白（下の余白にはキーガイドを置く）
+const MARGIN: int = 32
 
 ## view/main.gd（画面の切り替え役）
 var main: Node
@@ -18,14 +21,12 @@ var box: VBoxContainer
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
-		add_theme_constant_override("margin_" + side, 32)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(scroll)
+		add_theme_constant_override("margin_" + side, MARGIN)
+	# スクロールはしない。中身は画面（1280×720）に収まるように作る（tests/test_ui_flow.gd で確かめる）
 	box = VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 8)
-	scroll.add_child(box)
+	add_child(box)
 
 
 ## 中身を作る（main に追加された直後に呼ばれる）
@@ -73,6 +74,21 @@ func add_row() -> HBoxContainer:
 	return row
 
 
+## 画面下部にキーガイドを置く。items の形は KeyGuide.set_items() と同じ。
+## 並び（box）には入れず、画面の下の余白の中に重ねるので、ほかの中身の場所を取らない
+func add_key_guide(items: Array) -> KeyGuide:
+	var guide := KeyGuide.new()
+	guide.top_level = true  # コンテナの並びから外す（位置は画面の下端に合わせる）
+	add_child(guide)
+	guide.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	guide.offset_left = MARGIN
+	guide.offset_right = -MARGIN
+	guide.offset_top = -MARGIN + 3
+	guide.offset_bottom = -3
+	guide.set_items(items)
+	return guide
+
+
 ## 通信対戦で操作を送ったあと、ほかの人を待っていることを伝える（ひとりで遊ぶときは何もしない）
 func show_waiting(label: Label, text: String = "決定しました。ほかのプレイヤーを待っています") -> void:
 	if session().is_online():
@@ -95,11 +111,12 @@ func add_columns(left_ratio: float = 1.4) -> Array[VBoxContainer]:
 	return cols
 
 
-## 体力の一覧（生き残りが上）
-func add_standings(parent: Control = null, font_size: int = 16) -> void:
+## 体力の一覧（生き残りが上）。short なら「パーク N個」を「パークN」に縮める（狭い場所に並べるとき）。
+## per_row は1行に並べる人数（2 なら2人ずつ横に並べて、高さを半分にする）
+func add_standings(parent: Control = null, font_size: int = 16, short: bool = false, per_row: int = 1) -> void:
 	# 名前・体力のバー・数字・状態を表に並べ、差がひと目で分かるようにする
 	var grid := GridContainer.new()
-	grid.columns = 4
+	grid.columns = 4 * per_row
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 2)
 	(parent if parent != null else box).add_child(grid)
@@ -110,13 +127,14 @@ func add_standings(parent: Control = null, font_size: int = 16) -> void:
 		_cell(add_label(p.name, font_size, col, grid))
 		var bar := ProgressBar.new()
 		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(120, 10)
+		bar.custom_minimum_size = Vector2(56 if short else 120, 10)
 		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		bar.max_value = full
 		bar.value = p.health
 		grid.add_child(bar)
 		_cell(add_label("体力 %d" % roundi(p.health), font_size, col, grid))
-		_cell(add_label("%s　パーク %d個" % [status, p.perks.size()], font_size, COL_DIM if p.alive else col, grid))
+		var perks: String = ("パーク%d" if short else "パーク %d個") % p.perks.size()
+		_cell(add_label("%s　%s" % [status, perks], font_size, COL_DIM if p.alive else col, grid))
 
 
 ## 表の中の文字は折り返さない（折り返すと幅が0になって縦に並んでしまう）

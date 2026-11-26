@@ -246,6 +246,46 @@ const UI_BORDER := Color(0.42, 0.34, 0.2)
 const UI_TEXT := Color(0.88, 0.85, 0.78)
 const UI_ACCENT := Color(0.95, 0.72, 0.3)
 
+# ---- フォント ----
+## 全画面の文字（project.godot の gui/theme/custom_font と同じもの）
+const UI_FONT_PATH: String = "res://assets/fonts/DotGothic16-Regular.ttf"
+## タイトルの文字と、最初の画面のメニュー
+const TITLE_FONT_PATH: String = "res://assets/fonts/3270-Regular.ttf"
+
+# ---- 画面下部のキーガイド（view/key_guide.gd） ----
+## 文字の大きさ、項目の間、説明の文字の色、キーの札の下地と枠
+const KEY_GUIDE_FONT: int = 14
+const KEY_GUIDE_GAP: int = 22
+const KEY_GUIDE_TEXT := Color(0.62, 0.6, 0.55)
+const KEY_GUIDE_CAP_BG := Color(0.1, 0.09, 0.08)
+const KEY_GUIDE_CAP_BORDER := Color(0.42, 0.34, 0.2)
+
+# ---- 組み立て画面のプロンプト欄（端末のコマンド入力風） ----
+## 欄の下地と枠、先頭の「操縦士> 」の色、打った文字の色、カーソルの色と点滅の間隔（秒）
+const TERM_BG := Color(0.02, 0.025, 0.02)
+const TERM_BORDER := Color(0.42, 0.34, 0.2)
+const TERM_BORDER_FOCUS := Color(0.95, 0.72, 0.3)
+const TERM_PROMPT := Color(0.95, 0.72, 0.3)
+const TERM_TEXT := Color(0.88, 0.85, 0.78)
+const TERM_CARET := Color(0.95, 0.72, 0.3)
+const TERM_BLINK_SEC: float = 0.5
+const TERM_FONT: int = 18
+## 「操縦士> 」を、入力の1行目の文字の高さにそろえるための下げ幅（px）
+const TERM_HEAD_DROP: int = 2
+
+# ---- 出撃ボタン（view/garage/sortie_button.gd）：黄と黒の警告ストライプ ----
+const HAZARD_YELLOW := Color(0.98, 0.78, 0.1)
+const HAZARD_BLACK := Color(0.06, 0.05, 0.04)
+## 縞1本の太さ（絵の点の数）
+const HAZARD_STRIPE_PX: int = 8
+const SORTIE_SIZE := Vector2(200, 52)
+const SORTIE_FONT: int = 26
+const SORTIE_TEXT := Color(1.0, 0.98, 0.92)
+const SORTIE_OUTLINE: int = 10
+## 合わせたとき・押したときの明るさ（1.0 が基準）
+const SORTIE_HOVER_LIGHT: float = 1.15
+const SORTIE_PRESSED_LIGHT: float = 0.75
+
 # ---- タイトル画面（view/title/） ----
 ## タイトルの文字の色（鈍い金色）と、くすんだ影
 const TITLE_COLOR := Color(0.93, 0.68, 0.24)
@@ -272,6 +312,32 @@ const PREVIEW_STAGE: Dictionary = {
 ## 見本の大きさ（画面上の点）と、何分の1の解像度で描くか
 const PREVIEW_SIZE := Vector2(300, 170)
 const PREVIEW_SHRINK: int = 2
+# ---- パーツ選び（view/draft/part_carousel.gd・build_preview.gd） ----
+## 真ん中のカードの大きさ、両脇のカードの縮み具合と真ん中からのずれ（点）、暗さ
+const DRAFT_CARD_SIZE := Vector2(300, 150)
+## 組み立て画面の段のカード（段が多くても1画面に収まるよう、パーツ選びより小さくする）と見出しの文字の大きさ
+const GARAGE_CARD_SIZE := Vector2(260, 112)
+const GARAGE_HEADER_FONT: int = 18
+## 組み立て画面の下の帯に、付けたパーツの詳しい性能を横に何個並べるか
+const GARAGE_DETAIL_COLUMNS: int = 4
+const DRAFT_SIDE_SCALE: float = 0.8
+const DRAFT_SIDE_OFFSET: float = 210.0
+const DRAFT_SIDE_DIM: float = 0.45
+## カードを送るときに滑らせる秒数
+const DRAFT_SLIDE_SEC: float = 0.18
+## 種類の段を開く・閉じるのにかける秒数
+const DRAFT_EXPAND_SEC: float = 0.22
+## ◀▶の色と、ボタンの幅
+const DRAFT_ARROW_COLOR := Color(0.75, 0.36, 0.05)
+const DRAFT_ARROW_WIDTH: float = 44.0
+## 右側の組んだ機体の見本：大きさ（点）・何分の1で描くか・カメラ
+const DRAFT_PREVIEW_SIZE := Vector2(480, 180)
+const DRAFT_PREVIEW_SHRINK: int = 2
+const DRAFT_PREVIEW_STAGE: Dictionary = {
+	"camera": Vector3(0, 2.0, 4.6), "target": Vector3(0, 0.55, 0), "fov": 38.0,
+	"spin_deg_per_sec": 30.0, "floor": true,
+}
+
 ## パーツの種類ごとの目印の色（カードの帯と吹き出しの札）
 const KIND_COLORS: Dictionary = {
 	"frame": Color(0.62, 0.66, 0.7), "weapon": Color(0.95, 0.45, 0.28), "skill": Color(0.35, 0.85, 0.95),
@@ -307,15 +373,49 @@ const HP_BAR_LOST := Color(0.9, 0.25, 0.2)
 const HP_BAR_BACK := Color(0.05, 0.05, 0.05)
 const HP_BAR_OUT := Color(0.3, 0.29, 0.27)
 
+# ---- バトル中のHPバー（view/arena/battle_hp_bar.gd） ----
+## 大きさ（点）
+const BATTLE_HP_SIZE := Vector2(340, 26)
+## 削られた直後に白く光る秒数、赤い部分を残す秒数、赤い部分が満タン分を縮むのにかかる秒数
+const BATTLE_HP_FLASH_SEC: float = 0.08
+const BATTLE_HP_LAG_HOLD_SEC: float = 0.45
+const BATTLE_HP_LAG_DRAIN_SEC: float = 1.2
+## 揺れの最大の強さ（点）と、最大から止まるまでの秒数
+const BATTLE_HP_SHAKE_MAX: float = 7.0
+const BATTLE_HP_SHAKE_SEC: float = 0.35
+## 残りがこの割合を切ると赤く脈打つ（1秒に何回）
+const BATTLE_HP_LOW: float = 0.3
+const BATTLE_HP_LOW_PULSE_HZ: float = 2.5
+## 減った・増えた数を飛ばす秒数と文字の大きさ
+const BATTLE_HP_POP_SEC: float = 0.9
+const BATTLE_HP_POP_FONT: int = 20
+const BATTLE_HP_LOST := Color(0.95, 0.22, 0.16)
+const BATTLE_HP_HEAL := Color(0.45, 0.95, 0.45)
+## 減った数の色（赤い部分の上に重ねても読めるよう明るくする）
+const BATTLE_HP_POP_DAMAGE := Color(1.0, 0.96, 0.88)
+## バトル画面の上の見出しの幅（左右の機体の板にかぶらない幅）
+const BATTLE_HEADER_WIDTH: float = 480.0
+## 自分の試合が終わったときの「FINISH」：文字の大きさと色、押し込む前の大きさ（倍）、押し込む・見せておく・消える秒数
+const FINISH_FONT: int = 140
+const FINISH_COLOR := Color(1.0, 0.82, 0.35)
+const FINISH_START_SCALE: float = 3.0
+const FINISH_SLAM_SEC: float = 0.3
+const FINISH_HOLD_SEC: float = 1.6
+const FINISH_FADE_SEC: float = 0.5
+
 # ---- パーク選び（view/draft/perk_card.gd） ----
 ## パークの種類ごとの色。種類は効果の対象の先頭で決める（frame / weapon / skill / build は機体、prompt はプロンプト、pilot は操縦士）
 const PERK_GROUP_COLORS: Dictionary = {
 	"machine": Color(0.62, 0.66, 0.7), "prompt": Color(0.75, 0.55, 0.95), "pilot": Color(0.45, 0.85, 0.5),
 }
 const PERK_CARD_SIZE := Vector2(300, 250)
-## 配られたパーツを1枚ずつめくる間隔（秒）とめくる速さ（秒）
-const DEAL_STAGGER_SEC: float = 0.12
-const DEAL_FLIP_SEC: float = 0.18
+## 配られたパーツを1枚ずつ画面の中央に大きく見せてから、下の列の場所へ縮めて送る（view/draft/loot_screen.gd）
+## 中央での大きさ（倍）、現れる・見せておく・列へ飛ぶ時間（秒）、後ろを暗くする濃さ
+const LOOT_SHOW_SCALE: float = 1.8
+const LOOT_POP_SEC: float = 0.25
+const LOOT_HOLD_SEC: float = 0.5
+const LOOT_FLY_SEC: float = 0.3
+const LOOT_DIM_ALPHA: float = 0.6
 ## 残り時間の導火線（view/fuse_bar.gd）。この秒数を切ったら、先端が赤くなり、火花が増え、縄が震える
 const FUSE_WARN_SEC: float = 5.0
 ## 縄の太さ（点）、縄の地の色と縞の色、焦げ跡の色

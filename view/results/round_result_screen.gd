@@ -22,6 +22,8 @@ var bars: Dictionary = {}
 var _countdown: Label = null
 var _tags: Array = []  # [札, 出す時刻]
 var _t: float = 0.0
+## 体力バーの行を並べる場所
+var _bar_list: VBoxContainer
 
 
 func build_ui() -> void:
@@ -29,11 +31,23 @@ func build_ui() -> void:
 	var h: Dictionary = s.history[s.history.size() - 1]
 	add_title("ラウンド %d の結果" % h["round"])
 	_add_my_result(h)
-	add_label(" ", 4)
-	add_label("体力", 20, COL_ACCENT)
+	# 1画面に収めるため、体力バーと試合の一覧は行の間を詰めて並べる
+	var health_head := add_row()
+	add_label("体力", 20, COL_ACCENT, health_head).autowrap_mode = TextServer.AUTOWRAP_OFF
+	# 負けたラウンドにもらったスクラップは「体力」の見出しの横に出す（1画面に収めるため、行を増やさない）
+	var gain: int = int(h.get("scrap_gain", {}).get(main.human_id, 0))
+	if gain > 0:
+		scrap_gain_label = add_label("スクラップ +%d（負けたラウンドの分。後半の整備で使える）" % gain, 16, Look.UI_ACCENT, health_head)
+		scrap_gain_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		scrap_gain_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_bar_list = VBoxContainer.new()
+	_bar_list.add_theme_constant_override("separation", 1)  # フォントが DotGothic16 で行が少し高いので、1px に詰める
+	box.add_child(_bar_list)
 	_add_bars(h)
-	add_label(" ", 4)
 	add_label("このラウンドの試合", 18, COL_DIM)
+	var battles := VBoxContainer.new()
+	battles.add_theme_constant_override("separation", 0)
+	box.add_child(battles)
 	for e: Dictionary in h["battles"]:
 		var a: String = _name(int(e["a"]), -1)
 		var b: String = _name(int(e["b"]), int(e["ghost_of"]))
@@ -41,7 +55,7 @@ func build_ui() -> void:
 		var who: String = "引き分け" if w == -2 else "%s の勝ち" % (a if w == int(e["a"]) else b)
 		var involved: bool = int(e["a"]) == main.human_id or int(e["b"]) == main.human_id
 		add_label("%s vs %s → %s（%s、%.0f秒）" % [a, b, who, UiText.REASON_LABELS.get(e["reason"], ""), e["time"]],
-			16, COL_ACCENT if involved else COL_TEXT)
+			16, COL_ACCENT if involved else COL_TEXT, battles)
 	if not me().alive:
 		add_label("あなたは脱落した。最後まで観戦できる。", 17, COL_DIM)
 	# 一番下の行：次へ（通信対戦では残り秒数）と、開発用のスタンプの試し押し
@@ -93,9 +107,6 @@ func _add_my_result(h: Dictionary) -> void:
 			head = "%s に負けた（%s、%.0f秒）" % [opp, how, e["time"]]
 		add_label(head, 22, COL_TEXT, info)
 		_add_breakdown(h, e, w, info)
-		var gain: int = int(h.get("scrap_gain", {}).get(id, 0))
-		if gain > 0:
-			scrap_gain_label = add_label("スクラップ +%d（負けたラウンドの分。後半の整備で使える）" % gain, 16, Look.UI_ACCENT, info)
 		if h["eliminated"].has(id):
 			add_label("体力が0になり脱落（%d位）" % me().place, 20, COL_BAD, info)
 		return
@@ -127,10 +138,12 @@ func _add_breakdown(h: Dictionary, e: Dictionary, w: int, parent: Control) -> vo
 	breakdown_lines.append(add_label("　（上位にいるほど、相手を残して負けるほど、多く減る）", 14, COL_DIM, parent))
 
 
-## 勝ち負けのスタンプの台。中の文字と動きは play_stamp で決める
+## 勝ち負けのスタンプの台。中の文字と動きは play_stamp で決める。
+## 台は、LOSE で傾いたスタンプがはみ出さない（左端がスクロールの枠で切れない）だけ広く取る
 func _make_stamp(word: String) -> Control:
+	var pad: Vector2 = _tilt_pad()
 	var holder := Control.new()
-	holder.custom_minimum_size = STAMP_SIZE
+	holder.custom_minimum_size = STAMP_SIZE + pad * 2.0
 	stamp = Label.new()
 	stamp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stamp.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -139,10 +152,19 @@ func _make_stamp(word: String) -> Control:
 	stamp.add_theme_constant_override("outline_size", 10)
 	stamp.clip_contents = true  # 光の筋をスタンプの中だけに出す
 	stamp.size = STAMP_SIZE
+	stamp.position = pad
 	stamp.pivot_offset = STAMP_SIZE * 0.5
 	holder.add_child(stamp)
 	play_stamp(word)
 	return holder
+
+
+## 傾いたスタンプが元の大きさから片側にはみ出す幅と高さ
+static func _tilt_pad() -> Vector2:
+	var a: float = absf(deg_to_rad(Look.STAMP_TILT_DEG))
+	var half: Vector2 = STAMP_SIZE * 0.5
+	var rotated := Vector2(half.x * cos(a) + half.y * sin(a), half.x * sin(a) + half.y * cos(a))
+	return (rotated - half).max(Vector2.ZERO).ceil()
 
 
 ## スタンプを押す（押し直す）。どれも大きい状態からまっすぐドンと押し込み、そのあとが違う：
@@ -217,8 +239,9 @@ func _add_bars(h: Dictionary) -> void:
 		var dmg: int = int(h["damage"].get(p.id, 0))
 		var after: float = float(h["health"].get(p.id, p.health))
 		var out_before: bool = not p.alive and not h["eliminated"].has(p.id)
-		var row := add_row()
+		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 14)
+		_bar_list.add_child(row)
 		var mine: bool = p.id == main.human_id
 		var name_label: Label = add_label(p.name, 18, COL_ACCENT if mine else (COL_DIM if out_before else COL_TEXT), row)
 		name_label.custom_minimum_size = Vector2(150, 0)

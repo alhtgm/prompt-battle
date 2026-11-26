@@ -1,20 +1,20 @@
-# 開始時のパーツ選び。全員に同じ候補（種類ごとに5つ）をカードで見せ、種類ごとに1つ選ぶ。
-# カードに合わせる（フォーカスする）と、見本と効果の吹き出しが出る。下の欄に今選んでいる構成を出す。
+# 開始時のパーツ選び。全員に同じ候補（種類ごとに5つ）を、種類ごとの段で1枚ずつ大きく見せ、◀▶で送って選ぶ。
+# 開いている段は1つだけ（見出しに合わせると開く）。右に選んだ3つで組んだ機体の見本と、詳しい性能を出す。
 # 操作は MatchSession のメソッドだけを通す。
 extends "res://view/screen_base.gd"
 
 const GameData := preload("res://core/game_data.gd")
-const PartCard := preload("res://view/draft/part_card.gd")
-const PartTooltip := preload("res://view/draft/part_tooltip.gd")
+const PartCarousel := preload("res://view/draft/part_carousel.gd")
+const BuildPreview := preload("res://view/draft/build_preview.gd")
 
-## 種類 → 選んだ uid
+## 種類 → 選んだ uid（真ん中のカード）
 var picks: Dictionary = {}
-## uid → カード
-var cards: Dictionary = {}
-var tooltip: PartTooltip
+## 種類 → 段
+var carousels: Dictionary = {}
+## 今開いている段の種類
+var active_kind: String = ""
+var build_preview: BuildPreview
 var back_button: Button
-## 種類 → 構成の欄の [名前, ステータス] の文字
-var summary_labels: Dictionary = {}
 var _confirm: Button
 var _message: Label
 
@@ -26,82 +26,68 @@ func build_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back_button = add_button("タイトルへ戻る", back_to_title, head)
 	back_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	add_label("フレーム・武器・スキルから1つずつ選ぶ。候補は全員同じで、ほかの人と同じものを選んでもよい。カードに合わせると詳しく見られる。", 16, COL_DIM)
+	add_label("フレーム・武器・スキルから1つずつ選ぶ（候補は全員同じ）", 15, COL_DIM)
+	var cols: Array[VBoxContainer] = add_columns(1.25)
+	var left: VBoxContainer = cols[0]
+	left.add_theme_constant_override("separation", 6)
 	for kind: String in GameData.KINDS:
-		add_label(UiText.KIND_LABELS[kind], 20, Look.KIND_COLORS.get(kind, COL_ACCENT))
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 12)
-		box.add_child(row)
-		var group := ButtonGroup.new()
-		for p: Variant in session().draft_offer[kind]:
-			var card: PartCard = PartCard.new()
-			row.add_child(card)
-			card.setup(main.data, p, group)
-			card.toggled.connect(func(on: bool) -> void:
-				if on:
-					select(kind, p.uid))
-			card.hovered.connect(_on_card_hovered)
-			card.unhovered.connect(_on_card_unhovered)
-			cards[p.uid] = card
-	add_label(" ", 4)
-	# 下の行：決定ボタンと、今選んでいる構成の欄
-	var bottom := add_row()
-	bottom.add_theme_constant_override("separation", 16)
+		var c: PartCarousel = PartCarousel.new()
+		left.add_child(c)
+		c.setup(main.data, kind, session().draft_offer[kind])
+		c.picked.connect(_on_picked)
+		c.activated.connect(activate)
+		carousels[kind] = c
+		if c.current() != null:
+			picks[kind] = c.current().uid
+	# 段と決定ボタンの間を少し空ける
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 28)
+	left.add_child(gap)
+	# 決定ボタンと、うまくいかなかったときの文字。ボタンは真ん中のカードと同じ横位置（列の中央）に置き、文字はその下に出す
+	var bottom := VBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 6)
+	left.add_child(bottom)
 	_confirm = add_button("決定", confirm, bottom)
-	_confirm.custom_minimum_size = Vector2(160, 64)
-	_confirm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	bottom.add_child(_make_summary())
-	_message = add_label("", 17, COL_BAD)
-	# 吹き出しは並びの外に置き、スクロールの枠で切れないようにする
-	tooltip = PartTooltip.new()
-	add_child(tooltip)
-	tooltip.setup(main.data)
-	_update_confirm()
+	_confirm.custom_minimum_size = Vector2(200, 60)
+	_confirm.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_message = add_label("", 17, COL_BAD, bottom)
+	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	build_preview = BuildPreview.new()
+	cols[1].add_child(build_preview)
+	build_preview.setup(main.data)
+	activate(GameData.KINDS[0], false)
+	_refresh()
+	add_key_guide([[["←", "→"], "選ぶ"], [["↑", "↓"], "種類"]])
 
 
-## 今選んでいる構成の欄（種類ごとに横に並べる。文字は折り返さない）
-func _make_summary() -> PanelContainer:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var s := StyleBoxFlat.new()
-	s.bg_color = Color(0.08, 0.075, 0.07)
-	s.border_color = Look.UI_BORDER
-	s.set_border_width_all(1)
-	s.content_margin_left = 14
-	s.content_margin_right = 14
-	s.content_margin_top = 8
-	s.content_margin_bottom = 8
-	panel.add_theme_stylebox_override("panel", s)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 24)
-	panel.add_child(row)
-	var head: Label = _plain_label(row, "現在の構成", 15, COL_DIM)
-	head.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	for kind: String in GameData.KINDS:
-		var col := VBoxContainer.new()
-		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		col.add_theme_constant_override("separation", 0)
-		row.add_child(col)
-		var kind_col: Color = Look.KIND_COLORS.get(kind, COL_ACCENT)
-		var name_label: Label = _plain_label(col, "", 19, COL_TEXT)
-		var stat_label: Label = _plain_label(col, "", 13, kind_col.darkened(0.15))
-		summary_labels[kind] = [name_label, stat_label]
-	return panel
+## kind の段だけを開き、ほかは見出しの文字だけにする（animate なら少しずつ開閉する）
+func activate(kind: String, animate: bool = true) -> void:
+	if not carousels.has(kind) or (kind == active_kind and animate):
+		return
+	active_kind = kind
+	for k: String in carousels:
+		carousels[k].set_expanded(k == kind, animate)
 
 
-func _plain_label(parent: Control, text: String, size_px: int, col: Color) -> Label:
-	var l: Label = add_label(text, size_px, col, parent)
-	l.autowrap_mode = TextServer.AUTOWRAP_OFF
-	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	return l
+## 開いている段のカードを送る（+1 で右、-1 で左）
+func move(dir: int) -> void:
+	if carousels.has(active_kind):
+		carousels[active_kind].step(dir)
 
 
+## 開く段を上下に替える（+1 で下、-1 で上。端で止まる）
+func switch_section(dir: int) -> void:
+	var i: int = GameData.KINDS.find(active_kind)
+	activate(GameData.KINDS[clampi(i + dir, 0, GameData.KINDS.size() - 1)])
+
+
+## kind のパーツを uid にする（真ん中に置き直す）
 func select(kind: String, uid: int) -> void:
-	picks[kind] = uid
-	var card: Button = cards.get(uid)
-	if card != null and not card.button_pressed:
-		card.button_pressed = true  # 同じ組のほかのカードは外れる。toggled からまた select が呼ばれるが、同じ値を入れ直すだけ
-	_update_confirm()
+	if not carousels.has(kind):
+		return
+	carousels[kind].select_uid(uid)  # 候補にない uid なら今のまま
+	picks[kind] = carousels[kind].current().uid
+	_refresh()
 
 
 ## 選んだものを試合に伝えて、パーツ選びを締め切る。問題があれば理由を返す
@@ -120,32 +106,36 @@ func back_to_title() -> void:
 	main.show_title()
 
 
-func _on_card_hovered(card: Button) -> void:
-	tooltip.show_for(card.part, card)
-
-
-func _on_card_unhovered(card: Button) -> void:
-	if tooltip.part == card.part:
-		tooltip.hide_tip()
-
-
-func _update_confirm() -> void:
-	if _confirm == null:
+## ←→でカードを送り、↑↓で開く段を替える
+func _input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
 		return
+	var handled: bool = true
+	if event.is_action_pressed("ui_left", true):
+		move(-1)
+	elif event.is_action_pressed("ui_right", true):
+		move(1)
+	elif event.is_action_pressed("ui_up", true):
+		switch_section(-1)
+	elif event.is_action_pressed("ui_down", true):
+		switch_section(1)
+	else:
+		handled = false
+	if handled:
+		get_viewport().set_input_as_handled()
+
+
+func _on_picked(kind: String, uid: int) -> void:
+	picks[kind] = uid
+	_refresh()
+
+
+## 右の見本と一覧、決定ボタンを今の選択に合わせる
+func _refresh() -> void:
+	if build_preview == null:
+		return
+	var chosen: Dictionary = {}
+	for kind: String in carousels:
+		chosen[kind] = carousels[kind].current()
+	build_preview.show_parts(chosen)
 	_confirm.disabled = picks.size() < GameData.KINDS.size()
-	for kind: String in GameData.KINDS:
-		var labels: Array = summary_labels[kind]
-		var kind_name: String = UiText.KIND_LABELS[kind]
-		if not picks.has(kind):
-			labels[0].text = "%s：未選択" % kind_name
-			labels[0].add_theme_color_override("font_color", COL_DIM)
-			labels[1].text = " "
-			continue
-		var card: Button = cards[picks[kind]]
-		labels[0].text = "%s：%s" % [kind_name, card.name_label.text]
-		labels[0].add_theme_color_override("font_color", COL_TEXT)
-		var stats := PackedStringArray([UiText.part_tagline(main.data, card.part)])
-		var def: GameData.PartDef = main.data.get_part(card.part.def_id)
-		for st: String in def.stat_names():
-			stats.append(UiText.stat_text(st, card.part.get_stat(st)))
-		labels[1].text = " / ".join(stats)

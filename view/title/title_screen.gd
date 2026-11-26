@@ -28,6 +28,8 @@ var stage: Showroom
 var title_label: Label
 ## メニューのボタン（上から順）
 var menu_buttons: Array[Button] = []
+## タイトルとメニューの文字（ほかの文字は全画面共通のフォント）
+var title_font: Font = load(Look.TITLE_FONT_PATH)
 var how_to_panel: PanelContainer
 ## 機体を載せ替えた回数
 var swaps: int = 0
@@ -53,6 +55,7 @@ func build_ui() -> void:
 	_spacer(col, 56)
 
 	title_label = _label(col, "PROMPT BATTLE", 76, Look.TITLE_COLOR)
+	title_label.add_theme_font_override("font", title_font)
 	title_label.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.02))
 	title_label.add_theme_constant_override("outline_size", 14)
 	title_label.add_theme_color_override("font_shadow_color", Look.TITLE_SHADOW)
@@ -70,11 +73,11 @@ func build_ui() -> void:
 	menu.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	menu.add_theme_constant_override("separation", 2)
 	col.add_child(menu)
-	_menu_button(menu, "ひとりで遊ぶ", start)
-	_menu_button(menu, "オンラインで遊ぶ", open_online)
-	_menu_button(menu, "遊び方", toggle_how_to)
-	_menu_button(menu, "観戦画面（開発用）", open_debug_viewer)
-	_menu_button(menu, "やめる", quit_game)
+	_menu_button(menu, "Single Player", start)
+	_menu_button(menu, "Online", open_online)
+	_menu_button(menu, "How to Play", toggle_how_to)
+	_menu_button(menu, "Spectate (Dev)", open_debug_viewer)
+	_menu_button(menu, "Quit", quit_game)
 	# 下は空けておき、3Dの機体が見えるようにする
 	_add_how_to()
 	menu_buttons[0].call_deferred("grab_focus")
@@ -118,6 +121,7 @@ func _menu_button(parent: Control, text: String, on_press: Callable) -> Button:
 	b.text = text
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.custom_minimum_size = Vector2(320, 46)
+	b.add_theme_font_override("font", title_font)
 	b.add_theme_font_size_override("font_size", MENU_FONT_SIZE)
 	b.add_theme_color_override("font_color", Look.UI_TEXT)
 	b.add_theme_color_override("font_hover_color", Look.UI_ACCENT)

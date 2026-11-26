@@ -72,6 +72,7 @@ func _ready() -> void:
 ## すべての画面に使う見た目（暗い板、鈍い金色の枠、くすんだ文字）
 static func make_theme() -> Theme:
 	var t := Theme.new()
+	t.default_font = load(Look.UI_FONT_PATH)
 	t.default_font_size = 18
 	t.set_color("font_color", "Label", Look.UI_TEXT)
 	for cls: String in ["Button", "CheckBox"]:
