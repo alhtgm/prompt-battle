@@ -2,6 +2,7 @@
 extends "res://tests/support/test_case.gd"
 
 const H := preload("res://tests/support/battle_helpers.gd")
+const Balance := preload("res://tests/support/balance.gd")
 const GameData := preload("res://core/game_data.gd")
 const Rng := preload("res://core/rng.gd")
 const Loot := preload("res://core/loot.gd")
@@ -12,8 +13,6 @@ const AgentBrain := preload("res://agent/agent_brain.gd")
 
 ## 偏りを測る試合数
 const BALANCE_MATCHES: int = 400
-## パーツの勝率を見るのに必要な出場数
-const MIN_APPEARANCES: int = 40
 
 
 ## いつも壊れた答えを返す頭脳（テスト用）
@@ -49,9 +48,9 @@ func _robot_ok(r: Robot, half: float) -> bool:
 
 func test_every_match_finishes_with_sane_numbers() -> void:
 	var data := H.load_data()
-	var half: float = float(data.rule("battle.arena.half_size"))
 	for seed_value: int in 40:
 		var sim: BattleSim = H.make_match(data, seed_value)
+		var half: float = float(sim.stage["half_size"])
 		var broken: int = 0
 		while not sim.over and sim.tick <= sim.time_limit_ticks + 1:
 			sim.step()
@@ -88,65 +87,14 @@ func test_same_seed_gives_same_match() -> void:
 
 
 func test_balance_over_many_matches() -> void:
+	# 標準ステージ。ほかのステージは tests/test_stage_balance.gd で確かめる
 	var data := H.load_data()
-	var reasons: Dictionary = {BattleSim.REASON_DESTROYED: 0, BattleSim.REASON_PIT: 0, BattleSim.REASON_TIME: 0,
-		BattleSim.REASON_SELF_DESTRUCT: 0}
-	var wins: Array[int] = [0, 0]
-	var draws: int = 0
-	var part_win: Dictionary = {}
-	var part_games: Dictionary = {}
-	var total_time: float = 0.0
-	for seed_value: int in BALANCE_MATCHES:
-		var sim: BattleSim = H.make_match(data, 10000 + seed_value)
-		var res: Dictionary = sim.run_to_end()
-		reasons[res["reason"]] += 1
-		total_time += float(res["time"])
-		var w: int = res["winner"]
-		if w < 0:
-			draws += 1
-			continue
-		wins[w] += 1
-		for side: int in 2:
-			var ids: Dictionary = {}
-			for id: String in sim.robots[side].build.part_def_ids():
-				ids[id] = true
-			for id: String in ids:
-				part_games[id] = part_games.get(id, 0) + 1
-				if side == w:
-					part_win[id] = part_win.get(id, 0) + 1
-
-	var n: float = float(BALANCE_MATCHES)
-	var decided: int = wins[0] + wins[1]
-	print("    [偏り] %d試合 破壊 %d / 穴 %d / 時間切れ %d / 自爆で相打ち %d / 引き分け %d / 先の側の勝率 %.1f%% / 平均 %.1f 秒" % [
-		BALANCE_MATCHES, reasons[BattleSim.REASON_DESTROYED], reasons[BattleSim.REASON_PIT],
-		reasons[BattleSim.REASON_TIME], reasons[BattleSim.REASON_SELF_DESTRUCT], draws, 100.0 * wins[0] / maxf(1.0, decided), total_time / n])
-	var ids_sorted: Array = part_games.keys()
-	ids_sorted.sort()
-	var line: PackedStringArray = PackedStringArray()
-	for id: String in ids_sorted:
-		line.append("%s %d%%(%d)" % [id, roundi(100.0 * part_win.get(id, 0) / part_games[id]), part_games[id]])
-	print("    [勝率] " + ", ".join(line))
-
-	# ① 決着の種類：どれも 5% 以上、80% 以下
-	for r: String in reasons:
-		var ratio: float = reasons[r] / n
-		# 自爆で相打ちは、自爆装置を持った機体が負けかけたときだけ起きる珍しい決着なので、下限は見ない
-		var low: float = 0.0 if r == BattleSim.REASON_SELF_DESTRUCT else 0.05
-		check(ratio >= low and ratio <= 0.80, "決着「%s」の割合が %d〜80%%（実際 %.1f%%）" % [r, roundi(low * 100.0), ratio * 100.0])
-	# ② 先に置かれた側の勝率が 40〜60%
-	var side_a: float = wins[0] / maxf(1.0, decided)
-	check(side_a >= 0.40 and side_a <= 0.60, "先の側の勝率が 40〜60%%（実際 %.1f%%）" % (side_a * 100.0))
-	# ③ 引き分けが 20% 未満
-	check(draws / n < 0.20, "引き分けが 20%% 未満（実際 %.1f%%）" % (100.0 * draws / n))
-	# ④ どのフレーム・武器も勝率 25〜75%
-	for id: String in ids_sorted:
-		var def: GameData.PartDef = data.get_part(id)
-		if def.kind == GameData.KIND_SKILL:
-			continue
-		var games: int = part_games[id]
-		check(games >= MIN_APPEARANCES, "%s の出場数が %d 以上（実際 %d）" % [id, MIN_APPEARANCES, games])
-		var rate: float = float(part_win.get(id, 0)) / games
-		check(rate >= 0.25 and rate <= 0.75, "%s の勝率が 25〜75%%（実際 %.1f%%）" % [id, rate * 100.0])
+	var stats: Dictionary = Balance.measure(data, data.first_stage(), BALANCE_MATCHES, 10000)
+	var lines: PackedStringArray = Balance.summary(stats)
+	print("    [偏り] " + lines[0])
+	print("    [勝率] " + lines[1])
+	var bad: PackedStringArray = Balance.problems(data, stats)
+	check(bad.is_empty(), "基準①〜④をすべて満たす：" + " / ".join(bad))
 
 
 func test_mock_brain_answers_after_delay_in_match_time() -> void:
@@ -195,16 +143,17 @@ func test_think_interval_and_broken_answer() -> void:
 
 func test_driver_outputs_are_finite_for_every_intent() -> void:
 	var data := H.load_data()
-	var b: Dictionary = data.rules["battle"]
+	var b: Dictionary = BattleSim.rules_for(data, data.first_stage())
 	var rng := Rng.new(8)
 	var bad: int = 0
 	for k: int in 300:
 		var builds: Array = [Loot.random_build(data, rng, 1), Loot.random_build(data, rng, 50)]
 		var me := Robot.new()
 		var en := Robot.new()
-		me.setup(data, builds[0], 0, "A", b["arena"]["spawns"][0], b["robot"])
-		en.setup(data, builds[1], 1, "B", b["arena"]["spawns"][1], b["robot"])
-		var half: float = float(b["arena"]["half_size"])
+		var st: Dictionary = data.first_stage()
+		me.setup(data, builds[0], 0, "A", st["spawns"][0], b["robot"])
+		en.setup(data, builds[1], 1, "B", st["spawns"][1], b["robot"])
+		var half: float = float(st["half_size"])
 		me.x = rng.randf_range(-half, half)
 		me.z = rng.randf_range(-half, half)
 		en.x = me.x if k % 10 == 0 else rng.randf_range(-half, half)  # 重なったときも調べる
@@ -226,7 +175,7 @@ func test_observation_has_expected_shape() -> void:
 	for k: int in 120:
 		sim.step()
 	var Observation := preload("res://core/observation.gd")
-	var obs: Dictionary = Observation.build(sim.robots[0], sim.robots[1], sim.now(), sim.time_left(), data.rules["battle"])
+	var obs: Dictionary = Observation.build(sim.robots[0], sim.robots[1], sim.now(), sim.time_left(), sim.battle_rules())
 	for key: String in ["t", "me", "enemy", "repair", "events"]:
 		check(obs.has(key), "戦況に %s がある" % key)
 	for key: String in ["hp", "pos", "facing", "ammo", "stunned", "skills"]:

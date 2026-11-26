@@ -41,6 +41,12 @@ class Shot:
 
 var data: GameData
 var rng: Rng
+## このバトルのステージ（data/stages.json の1つ）。画面はここから床や穴を描く
+var stage: Dictionary = {}
+## 開発モードの設定（作ったあと、進める前に変える）。invincible[i] なら機体 i のHPが減らない（ダメージの記録と演出は残す）。
+## no_time_limit なら制限時間で決着しない
+var invincible: Array[bool] = [false, false]
+var no_time_limit: bool = false
 var robots: Array[Robot] = []
 var shots: Array[Shot] = []
 ## 次に撃つ弾の番号
@@ -73,11 +79,14 @@ var _blast_kill: bool = false
 
 
 ## builds・brains・prompts・names はどれも2つ。brains は agent_brain.gd を継承したもの
-func _init(game_data: GameData, builds: Array, brains: Array, prompts: Array, names: Array, battle_rng: Rng) -> void:
+## stage はステージ（data/stages.json の1つ）。空なら1ラウンド目のステージ
+func _init(game_data: GameData, builds: Array, brains: Array, prompts: Array, names: Array, battle_rng: Rng,
+		battle_stage: Dictionary = {}) -> void:
 	data = game_data
 	rng = battle_rng
 	_brains = brains
-	_b = data.rules["battle"]
+	stage = battle_stage if not battle_stage.is_empty() else data.first_stage()
+	_b = rules_for(data, stage)
 	tick_rate = int(data.rule("tick_rate"))
 	dt = 1.0 / float(tick_rate)
 	time_limit_ticks = roundi(float(_b["time_limit_sec"]) * tick_rate)
@@ -89,16 +98,32 @@ func _init(game_data: GameData, builds: Array, brains: Array, prompts: Array, na
 		var r := Robot.new()
 		r.setup(data, builds[i], i, str(names[i]), spawns[i], _b["robot"])
 		robots.append(r)
+	# 頭脳には、ルールにこのバトルのステージを足して渡す
+	var brain_rules: Dictionary = data.rules.duplicate()
+	brain_rules["stage"] = stage
 	for i: int in 2:
-		_brains[i].begin(str(prompts[i]), build_summary(data, builds[i]), data.rules)
+		_brains[i].begin(str(prompts[i]), build_summary(data, builds[i]), brain_rules)
 	# 回復パックを最初から count 個置く（場所と大小は、試合の種から分けた乱数で決める）
 	_pack_rng = battle_rng.fork("health_packs")
 	# 最初の分は決まった場所（initial）に、足りない分と出直す分はランダムな場所に置く
-	var initial: Array = _b["health_packs"].get("initial", [])
+	var initial: Array = stage["packs"]
 	for k: int in int(_b["health_packs"]["count"]):
 		var p: Dictionary = {"id": 0, "x": 0.0, "z": 0.0, "big": false, "heal": 0.0, "active": false, "t": 0.0}
 		packs.append(p)
 		_place_pack(p, initial[k] if k < initial.size() else {})
+
+
+## バトルのルール（rules.json の battle）に、ステージを "arena" として足したもの。
+## 実行役（robot_driver.gd）や戦況づくり（observation.gd）は、場の形を battle["arena"] から読む
+static func rules_for(game_data: GameData, battle_stage: Dictionary) -> Dictionary:
+	var b: Dictionary = game_data.rules["battle"].duplicate()
+	b["arena"] = battle_stage
+	return b
+
+
+## このバトルで使っているルール（rules_for の結果）。テストで実行役や戦況づくりを直接呼ぶときに使う
+func battle_rules() -> Dictionary:
+	return _b
 
 
 ## エージェントに渡す機体の説明
@@ -130,9 +155,9 @@ func time_left() -> float:
 	return maxf(0.0, float(time_limit_ticks - tick) / float(tick_rate))
 
 
-## 決着するまで進めて結果を返す（画面なしの試合用）
+## 決着するまで進めて結果を返す（画面なしの試合用）。制限時間がない（開発モード）ときは、制限時間の分だけ進めて止める
 func run_to_end() -> Dictionary:
-	while not over:
+	while not over and (not no_time_limit or tick < time_limit_ticks):
 		step()
 	return result
 
@@ -503,7 +528,8 @@ func _damage(victim_i: int, amount: float, from_x: float, from_z: float, label: 
 	mult *= 1.0 - clampf(v.active_value("shield", "damage_cut", 0.0), 0.0, 1.0)
 	mult *= maxf(0.0, a.active_value("overclock", "damage_mult", 1.0))
 	var dmg: float = amount * mult
-	v.hp = maxf(0.0, v.hp - dmg)
+	if not invincible[victim_i]:
+		v.hp = maxf(0.0, v.hp - dmg)
 	a.dealt += dmg
 	# HPが尽きたら、自爆装置があれば導火線に火がつく（自爆で壊されたときは道連れなのでつかない）
 	if v.hp <= 0.0 and not _blasting:
@@ -773,7 +799,7 @@ func _check_over() -> void:
 		# 両方倒れていて、自爆が相手を壊したのなら、自爆による道連れ（引き分け）
 		reason = REASON_SELF_DESTRUCT if both and _blast_kill else REASON_DESTROYED
 		winner = -1 if both else (1 if a.is_down() else 0)
-	elif tick >= time_limit_ticks:
+	elif tick >= time_limit_ticks and not no_time_limit:
 		reason = REASON_TIME
 		var diff: float = a.hp_ratio() - b.hp_ratio()
 		winner = -1 if absf(diff) < float(_b["draw_hp_ratio_diff"]) else (0 if diff > 0.0 else 1)

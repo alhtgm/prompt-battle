@@ -1,4 +1,4 @@
-# data/ の3ファイル（parts.json / perks.json / rules.json）を読み込み、検証して保持する。
+# data/ の4ファイル（parts.json / perks.json / rules.json / stages.json）を読み込み、検証して保持する。
 # シーンやノードに依存しないので、画面なしでもサーバーでも使える。
 extends RefCounted
 
@@ -102,11 +102,15 @@ const NUMBER_RULES: Array = [
 	["parts.stat_spread", 0, false],
 	["parts.stat_step_default", 0, false],
 	["battle.draw_hp_ratio_diff", 0, false],
-	["battle.arena.half_size", 1, false],
 	["agent.say_max_chars", 1, true],
 	["match.max_rounds", 1, true],
 	["match.pairing_attempts", 1, true],
 ]
+
+## ステージのギミック（stages.json の各ステージに書く項目 → 名前）。docs/design.md「ステージとギミック」
+## 配列の項目は空なら「ない」、true/false の項目は true なら「ある」。
+## ギミックは見送りになったので、今は何もない。足すときはここに書くと、開発モードでオン・オフを選べるようになる
+const GIMMICKS: Dictionary = {}
 
 ## 引き分けのときのダメージの扱い
 const DRAW_DAMAGE_MODES: Array[String] = ["none", "rank_only"]
@@ -166,34 +170,44 @@ var parts_by_id: Dictionary[String, PartDef] = {}
 var perks: Array[PerkDef] = []
 var perks_by_id: Dictionary[String, PerkDef] = {}
 var rules: Dictionary = {}
+## ステージ（data/stages.json の順）。1つは {"id", "name", "description", "half_size", "pits", "spawns", "packs"}
+var stages: Array[Dictionary] = []
+var stages_by_id: Dictionary[String, Dictionary] = {}
+## 1ラウンド目に使うステージのID
+var first_stage_id: String = ""
 ## 読み込みと検証で見つかった問題（空なら正常）
 var errors: PackedStringArray = PackedStringArray()
 
 
-## フォルダから3ファイルを読む。問題がなければ true
+## フォルダから4ファイルを読む。問題がなければ true
 func load_dir(dir: String = "res://data") -> bool:
 	errors.clear()
 	var parts_json: Variant = _read_json(dir.path_join("parts.json"))
 	var perks_json: Variant = _read_json(dir.path_join("perks.json"))
 	var rules_json: Variant = _read_json(dir.path_join("rules.json"))
+	var stages_json: Variant = _read_json(dir.path_join("stages.json"))
 	if not errors.is_empty():
 		return false
-	return load_from_values(parts_json, perks_json, rules_json)
+	return load_from_values(parts_json, perks_json, rules_json, stages_json)
 
 
 ## 読み込み済みのJSONの値から作る（テストで壊れたデータを試すのにも使う）
-func load_from_values(parts_json: Variant, perks_json: Variant, rules_json: Variant) -> bool:
+func load_from_values(parts_json: Variant, perks_json: Variant, rules_json: Variant, stages_json: Variant) -> bool:
 	errors.clear()
 	parts.clear()
 	parts_by_id.clear()
 	perks.clear()
 	perks_by_id.clear()
+	stages.clear()
+	stages_by_id.clear()
+	first_stage_id = ""
 	rules = {}
 	_load_rules(rules_json)
 	if not errors.is_empty():
-		return false  # パーツの読み込みにルールの値を使うので、ここで止める
+		return false  # パーツとステージの読み込みにルールの値を使うので、ここで止める
 	_load_parts(parts_json)
 	_load_perks(perks_json)
+	_load_stages(stages_json)
 	return errors.is_empty()
 
 
@@ -212,6 +226,58 @@ func get_part(id: String) -> PartDef:
 
 func get_perk(id: String) -> PerkDef:
 	return perks_by_id.get(id, null)
+
+
+## IDでステージを取る。ないときは空の辞書
+func get_stage(id: String) -> Dictionary:
+	return stages_by_id.get(id, {})
+
+
+## 1ラウンド目のステージ（ステージを指定しないバトルもこれを使う）
+func first_stage() -> Dictionary:
+	return get_stage(first_stage_id)
+
+
+## ステージにそのギミックがあるか
+static func stage_has_gimmick(st: Dictionary, key: String) -> bool:
+	var v: Variant = st.get(key)
+	if v is Array:
+		return not (v as Array).is_empty()
+	return v is bool and v
+
+
+## ステージにあるギミック（GIMMICKS の順）
+static func stage_gimmicks(st: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for key: String in GIMMICKS:
+		if stage_has_gimmick(st, key):
+			out.append(key)
+	return out
+
+
+## 決めたギミックを外したステージの写し（元のステージは変えない）。開発モードで使う
+static func without_gimmicks(st: Dictionary, keys: Array) -> Dictionary:
+	var out: Dictionary = st.duplicate(true)
+	for key: Variant in keys:
+		if not GIMMICKS.has(key):
+			continue
+		if out.get(key) is Array:
+			out[key] = []
+		elif out.has(key):
+			out[key] = false
+	return out
+
+
+## 手で作り替えたステージ（開発モードの編集など）を、読み込みのときと同じ決まりで確かめる。問題の一覧を返す（空なら正常）
+func check_stage(st: Dictionary) -> PackedStringArray:
+	var saved: PackedStringArray = errors
+	errors = PackedStringArray()
+	var where: String = "ステージ %s" % str(st.get("id", ""))
+	if _check_stage_shape(st, where):
+		_check_stage_places(st, where)
+	var found: PackedStringArray = errors
+	errors = saved
+	return found
 
 
 ## "battle.time_limit_sec" のような点区切りのパスでルールの値を取る
@@ -301,17 +367,6 @@ func _load_rules(rules_json: Variant) -> void:
 				errors.append("rules.json：%s は 0 以上の数値にする" % path)
 	if not DRAW_DAMAGE_MODES.has(str(_find_rule("damage.on_draw")[1])):
 		errors.append("rules.json：damage.on_draw は %s のどれかにする" % ", ".join(DRAW_DAMAGE_MODES))
-	_check_circles("battle.arena.pits", true)
-	_check_points("battle.health_packs.initial")
-	var spawns: Variant = _find_rule("battle.arena.spawns")[1]
-	if not (spawns is Array) or (spawns as Array).size() != 2:
-		errors.append("rules.json：battle.arena.spawns は2つの { x, z, facing_deg } にする")
-	else:
-		for s: Variant in spawns:
-			if not (s is Dictionary) or not _is_finite_number(s.get("x")) \
-					or not _is_finite_number(s.get("z")) or not _is_finite_number(s.get("facing_deg")):
-				errors.append("rules.json：battle.arena.spawns の中身は { x, z, facing_deg } にする")
-
 	var steps: Variant = _find_rule("parts.stat_steps")[1]
 	if steps != null:
 		if not (steps is Dictionary):
@@ -322,30 +377,101 @@ func _load_rules(rules_json: Variant) -> void:
 					errors.append("rules.json：parts.stat_steps.%s は 0 以上の数値にする" % str(k))
 
 
-## { x, z, r } の円の配列を検査する（穴）
-func _check_circles(path: String, need_one: bool) -> void:
-	var v: Variant = _find_rule(path)[1]
-	if not (v is Array) or (need_one and (v as Array).is_empty()):
-		errors.append("rules.json：%s は { x, z, r } の配列にする" % path)
+func _load_stages(stages_json: Variant) -> void:
+	if not (stages_json is Dictionary) or not ((stages_json as Dictionary).get("stages") is Array) \
+			or ((stages_json as Dictionary)["stages"] as Array).is_empty():
+		errors.append("stages.json：{ \"first\": ID, \"stages\": [ ... ] } の形にし、ステージを1つ以上書く")
 		return
-	for c: Variant in v:
-		if not (c is Dictionary) or not _is_finite_number(c.get("x")) or not _is_finite_number(c.get("z")) \
-				or not _is_finite_number(c.get("r")) or float(c.get("r")) <= 0.0:
-			errors.append("rules.json：%s の中身は { x, z, r }（r は正）にする" % path)
+	for raw: Variant in stages_json["stages"]:
+		if not (raw is Dictionary):
+			errors.append("stages.json：ステージは { } にする")
+			continue
+		var st: Dictionary = (raw as Dictionary).duplicate(true)
+		var id: String = str(st.get("id", ""))
+		var where: String = "stages.json：%s" % (id if not id.is_empty() else "（IDなし）")
+		if id.is_empty() or stages_by_id.has(id):
+			errors.append("%s：id は空でない、ほかと重ならない文字にする" % where)
+			continue
+		if not (st.get("name") is String) or str(st["name"]).is_empty():
+			errors.append("%s：name を書く" % where)
+		if not (st.get("description", "") is String):
+			errors.append("%s：description は文字にする" % where)
+		st["description"] = str(st.get("description", ""))
+		if not st.has("packs"):
+			st["packs"] = []
+		if _check_stage_shape(st, where):
+			_check_stage_places(st, where)
+		stages.append(st)
+		stages_by_id[id] = st
+	first_stage_id = str(stages_json.get("first", ""))
+	if not stages_by_id.has(first_stage_id):
+		errors.append("stages.json：first は書いたステージのIDにする（今は %s）" % first_stage_id)
 
 
-## { x, z } の点の配列を検査する（回復パックの最初の場所）。なくてもよい
-func _check_points(path: String) -> void:
-	var found: Array = _find_rule(path)
-	if not found[0]:
-		return
-	var v: Variant = found[1]
-	if not (v is Array):
-		errors.append("rules.json：%s は { x, z } の配列にする" % path)
-		return
-	for c: Variant in v:
-		if not (c is Dictionary) or not _is_finite_number(c.get("x")) or not _is_finite_number(c.get("z")):
-			errors.append("rules.json：%s の中身は { x, z } にする" % path)
+## 広さ・穴・出る位置・回復パックの形を確かめる。形が正しければ true
+func _check_stage_shape(st: Dictionary, where: String) -> bool:
+	var ok: bool = true
+	if not _is_finite_number(st.get("half_size")) or float(st["half_size"]) < 1.0:
+		errors.append("%s：half_size は 1 以上の数値にする" % where)
+		ok = false
+	var pits: Variant = st.get("pits")
+	if not (pits is Array) or (pits as Array).is_empty():
+		errors.append("%s：pits は { x, z, r } の配列にし、穴を1つ以上書く" % where)
+		ok = false
+	else:
+		for c: Variant in pits:
+			if not _is_point(c) or not _is_finite_number(c.get("r")) or float(c.get("r")) <= 0.0:
+				errors.append("%s：pits の中身は { x, z, r }（r は正）にする" % where)
+				ok = false
+	var spawns: Variant = st.get("spawns")
+	if not (spawns is Array) or (spawns as Array).size() != 2:
+		errors.append("%s：spawns は2つの { x, z, facing_deg } にする" % where)
+		ok = false
+	else:
+		for s: Variant in spawns:
+			if not _is_point(s) or not _is_finite_number(s.get("facing_deg")):
+				errors.append("%s：spawns の中身は { x, z, facing_deg } にする" % where)
+				ok = false
+	var packs: Variant = st.get("packs")
+	if not (packs is Array):
+		errors.append("%s：packs は { x, z } の配列にする" % where)
+		ok = false
+	else:
+		for c: Variant in packs:
+			if not _is_point(c):
+				errors.append("%s：packs の中身は { x, z } にする" % where)
+				ok = false
+	return ok
+
+
+## 出る位置と回復パックの最初の場所が場の中にあり、穴から離れているかを確かめる
+func _check_stage_places(st: Dictionary, where: String) -> void:
+	var half: float = float(st["half_size"])
+	var radius: float = float(rule("battle.robot.radius"))
+	var near: float = float(rule("battle.pit.near_dist"))
+	var places: Array = []
+	for s: Dictionary in st["spawns"]:
+		places.append(["出る位置", s, radius])
+	for p: Dictionary in st["packs"]:
+		places.append(["回復パックの場所", p, 0.0])
+	for e: Array in places:
+		var c := Vector2(float(e[1]["x"]), float(e[1]["z"]))
+		if absf(c.x) > half - float(e[2]) or absf(c.y) > half - float(e[2]):
+			errors.append("%s：%s (%s, %s) が場の外にある" % [where, e[0], c.x, c.y])
+		for pit: Dictionary in st["pits"]:
+			var gap: float = c.distance_to(Vector2(float(pit["x"]), float(pit["z"]))) - float(pit["r"])
+			if gap < near:
+				errors.append("%s：%s (%s, %s) が穴の縁から %s しか離れていない（battle.pit.near_dist の %s 以上にする）"
+					% [where, e[0], c.x, c.y, snappedf(gap, 0.01), near])
+	var sp: Array = st["spawns"]
+	var d: float = Vector2(float(sp[0]["x"]) - float(sp[1]["x"]), float(sp[0]["z"]) - float(sp[1]["z"])).length()
+	if d < radius * 2.0:
+		errors.append("%s：2つの出る位置が重なっている" % where)
+
+
+## { x, z } の形（ほかの項目はあってもよい）
+static func _is_point(v: Variant) -> bool:
+	return v is Dictionary and _is_finite_number(v.get("x")) and _is_finite_number(v.get("z"))
 
 
 ## [最小, 最大] の形の整数の範囲を検査する

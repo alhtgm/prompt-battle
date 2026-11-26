@@ -57,6 +57,8 @@ var _font: Font
 var _screenshot_path: String = ""
 var _screenshot_at: float = -1.0
 var _elapsed: float = 0.0
+## 今のステージの番号（data.stages の順。S で切り替える）
+var _stage_index: int = 0
 
 
 func _ready() -> void:
@@ -73,6 +75,8 @@ func _ready() -> void:
 			_screenshot_at = float(arg.get_slice("=", 1))
 		elif arg.begins_with("--seed="):
 			seed_value = int(arg.get_slice("=", 1))
+		elif arg.begins_with("--stage="):
+			_stage_index = maxi(0, data.stages.find(data.get_stage(arg.get_slice("=", 1))))
 	if seed_value == 0:
 		seed_value = Time.get_ticks_usec() % 1000000 + 1
 	_start_match(seed_value)
@@ -86,11 +90,11 @@ func _start_match(s: int) -> void:
 	var builds: Array = [Loot.random_build(data, setup, 1), Loot.random_build(data, setup, 100)]
 	prompts = [setup.pick(PROMPTS), setup.pick(PROMPTS)]
 	var brains: Array = [MockBrain.new(root.fork("brain/0")), MockBrain.new(root.fork("brain/1"))]
-	sim = BattleSim.new(data, builds, brains, prompts, ["青", "橙"], root.fork("battle"))
+	sim = BattleSim.new(data, builds, brains, prompts, ["青", "橙"], root.fork("battle"), data.stages[_stage_index])
 	log_lines.clear()
 	_acc = 0.0
 	_over_wait = 0.0
-	_log("試合開始（種 %d）" % seed_value)
+	_log("試合開始（種 %d、ステージ：%s）" % [seed_value, sim.stage["name"]])
 
 
 func _process(delta: float) -> void:
@@ -133,6 +137,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_N:
 			_start_match(seed_value + 1)
 		KEY_R:
+			_start_match(seed_value)
+		KEY_S:
+			_stage_index = (_stage_index + 1) % data.stages.size()
 			_start_match(seed_value)
 		KEY_1, KEY_2, KEY_3, KEY_4:
 			_speed_index = k.keycode - KEY_1
@@ -183,12 +190,12 @@ func _collect_events() -> void:
 # ---- 描画 ----
 
 func _to_screen(x: float, z: float) -> Vector2:
-	var half: float = float(data.rule("battle.arena.half_size"))
+	var half: float = float(sim.stage["half_size"])
 	return ARENA_ORIGIN + Vector2(x + half, z + half) * (ARENA_PX / (2.0 * half))
 
 
 func _px(world_len: float) -> float:
-	return world_len * ARENA_PX / (2.0 * float(data.rule("battle.arena.half_size")))
+	return world_len * ARENA_PX / (2.0 * float(sim.stage["half_size"]))
 
 
 func _text(pos: Vector2, s: String, size: int = 16, col: Color = COL_TEXT) -> void:
@@ -199,7 +206,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), COL_BG)
 	if sim == null:
 		return
-	var arena: Dictionary = data.rules["battle"]["arena"]
+	var arena: Dictionary = sim.stage
 	draw_rect(Rect2(ARENA_ORIGIN, Vector2(ARENA_PX, ARENA_PX)), COL_FLOOR)
 	draw_rect(Rect2(ARENA_ORIGIN, Vector2(ARENA_PX, ARENA_PX)), COL_WALL, false, 3.0)
 	# 回復パック（大は大きく描く）
@@ -243,7 +250,7 @@ func _draw_robot(r: Robot) -> void:
 
 func _draw_panel() -> void:
 	var y: float = 30.0
-	_text(Vector2(PANEL_X, y), "開発用の観戦画面（仮）  種 %d" % seed_value, 18)
+	_text(Vector2(PANEL_X, y), "開発用の観戦画面（仮）  種 %d  ステージ：%s" % [seed_value, sim.stage["name"]], 18)
 	y += 26.0
 	var state: String = "一時停止" if _paused else ("x%s" % SPEEDS[_speed_index])
 	_text(Vector2(PANEL_X, y), "%.1f 秒 / 残り %.1f 秒   %s" % [sim.now(), sim.time_left(), state], 16, COL_DIM)
@@ -261,7 +268,7 @@ func _draw_panel() -> void:
 	for line: String in log_lines:
 		_text(Vector2(PANEL_X, y), line, 13)
 		y += 17.0
-	_text(Vector2(PANEL_X, 705.0), "Space 一時停止 / N 次の試合 / R やり直し / 1〜4 速さ / Esc タイトルへ", 13, COL_DIM)
+	_text(Vector2(PANEL_X, 705.0), "Space 一時停止 / N 次の試合 / R やり直し / S ステージ / 1〜4 速さ / Esc タイトルへ", 13, COL_DIM)
 
 
 func _draw_robot_info(r: Robot, y: float) -> float:

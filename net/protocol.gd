@@ -88,12 +88,12 @@ static func session_state(s: RefCounted, viewer_id: int, extra: Dictionary) -> D
 			# 生き残っている間は、自分のもの以外のプロンプトを送らない（企画メモ「観戦」）
 			prompts.append(bt.prompts[side] if not viewer_alive or ids[side] == viewer_id else "")
 		battles.append({
-			"a": bt.a, "b": bt.b, "ghost_of": bt.ghost_of, "prompts": prompts,
+			"a": bt.a, "b": bt.b, "ghost_of": bt.ghost_of, "prompts": prompts, "stage": bt.sim.stage["id"],
 			"names": [bt.sim.robots[0].name, bt.sim.robots[1].name],
 			"builds": [bt.sim.robots[0].build.to_dict(), bt.sim.robots[1].build.to_dict()],
 		})
 	var st: Dictionary = {
-		"phase": s.phase, "round_no": s.round_no, "my_id": viewer_id, "players": players, "me": mine,
+		"phase": s.phase, "round_no": s.round_no, "stage": s.stage.get("id", ""), "my_id": viewer_id, "players": players, "me": mine,
 		"draft_offer": offer, "history": s.history, "battles": battles,
 	}
 	st.merge(extra, true)

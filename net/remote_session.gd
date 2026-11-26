@@ -26,6 +26,8 @@ var data: GameData
 var players: Array[Player] = []
 var phase: String = ""
 var round_no: int = 0
+## 今のラウンドのステージ（MatchSession.stage と同じ形）
+var stage: Dictionary = {}
 var my_id: int = -1
 var draft_offer: Dictionary = {}
 var battles: Array[RemoteBattle] = []
@@ -88,6 +90,7 @@ func standings() -> Array[Player]:
 func apply_state(st: Dictionary) -> void:
 	phase = str(st.get("phase", ""))
 	round_no = int(st.get("round_no", 0))
+	stage = data.get_stage(str(st.get("stage", "")))
 	my_id = int(st.get("my_id", -1))
 	phase_time_left = float(st.get("time_left", 0.0))
 	history = st.get("history", [])
@@ -138,7 +141,7 @@ func apply_state(st: Dictionary) -> void:
 	var bs: Array = st.get("battles", [])
 	var lineup: String = ""
 	for d: Dictionary in bs:
-		lineup += "%d/%d/%d;" % [int(d["a"]), int(d["b"]), int(d["ghost_of"])]
+		lineup += "%d/%d/%d/%s;" % [int(d["a"]), int(d["b"]), int(d["ghost_of"]), str(d.get("stage", ""))]
 	if round_no != _battle_round or lineup != _lineup:
 		_lineup = lineup
 		battles = []
@@ -148,7 +151,8 @@ func apply_state(st: Dictionary) -> void:
 			bt.b = int(d["b"])
 			bt.ghost_of = int(d["ghost_of"])
 			bt.sim = RemoteSim.new()
-			bt.sim.setup(data, [Build.from_dict(d["builds"][0]), Build.from_dict(d["builds"][1])], d["names"])
+			bt.sim.setup(data, [Build.from_dict(d["builds"][0]), Build.from_dict(d["builds"][1])], d["names"],
+				str(d.get("stage", "")))
 			battles.append(bt)
 		_battle_round = round_no
 	for k: int in mini(bs.size(), battles.size()):

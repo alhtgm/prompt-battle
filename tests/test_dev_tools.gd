@@ -156,7 +156,7 @@ func test_dev_camera_moves() -> void:
 	for k: int in 40:
 		arena.dev_zoom(2.0)
 	check_eq(arena.cam_dist, Look.DEV_CAM_DIST_MAX, "離れすぎない")
-	var lim: float = float(main.data.rule("battle.arena.half_size")) + Look.DEV_CAM_PAN_MARGIN
+	var lim: float = float(arena.stage["half_size"]) + Look.DEV_CAM_PAN_MARGIN
 	arena.dev_pan(1000.0, 1000.0)
 	check(absf(arena.cam_pivot.x) <= lim + 0.001 and absf(arena.cam_pivot.z) <= lim + 0.001, "見る点はアリーナから離れすぎない")
 	check(is_finite(cam.position.x) and is_finite(cam.position.y) and is_finite(cam.position.z), "カメラの位置が壊れない")

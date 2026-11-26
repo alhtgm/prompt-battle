@@ -27,6 +27,8 @@ const SPARK_LIFE: float = 0.6
 enum CameraMode { FOLLOW, FREE, TRACK }
 
 var data: GameData
+## 描いているステージ（data/stages.json の1つ）
+var stage: Dictionary = {}
 var sim: Variant = null
 var robot_views: Array[Node3D] = []
 var camera: Camera3D
@@ -56,9 +58,11 @@ var _spark_mat: StandardMaterial3D
 var _shoot_names: Dictionary = {}
 
 
-func setup(game_data: GameData) -> void:
+## arena_stage は描くステージ。空なら1ラウンド目のステージ
+func setup(game_data: GameData, arena_stage: Dictionary = {}) -> void:
 	data = game_data
-	var arena: Dictionary = data.rules["battle"]["arena"]
+	stage = arena_stage if not arena_stage.is_empty() else data.first_stage()
+	var arena: Dictionary = stage
 	var half: float = float(arena["half_size"])
 	_add_environment()
 	_add_lights(half)
@@ -229,7 +233,7 @@ func dev_pan(right: float, forward: float) -> void:
 	dev_free_camera()
 	var r := Vector3(cos(cam_yaw), 0.0, -sin(cam_yaw))
 	var f := Vector3(-sin(cam_yaw), 0.0, -cos(cam_yaw))
-	var lim: float = float(data.rule("battle.arena.half_size")) + Look.DEV_CAM_PAN_MARGIN
+	var lim: float = float(stage["half_size"]) + Look.DEV_CAM_PAN_MARGIN
 	cam_pivot += r * right + f * forward
 	cam_pivot.x = clampf(cam_pivot.x, -lim, lim)
 	cam_pivot.z = clampf(cam_pivot.z, -lim, lim)

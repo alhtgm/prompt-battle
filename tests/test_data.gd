@@ -83,7 +83,7 @@ func test_explicit_min_max_is_supported() -> void:
 	var parts: Dictionary = _raw("parts.json")
 	parts["parts"][0]["stats"]["hp"] = {"min": 50, "max": 70}
 	var data := GameData.new()
-	check(data.load_from_values(parts, _raw("perks.json"), _raw("rules.json")), "min/max の書き方も読める")
+	check(data.load_from_values(parts, _raw("perks.json"), _raw("rules.json"), _raw("stages.json")), "min/max の書き方も読める")
 	var r: GameData.StatRange = data.parts[0].stats["hp"]
 	check(r.min_value == 50.0 and r.max_value == 70.0, "min/max がそのまま使われる")
 
@@ -98,9 +98,11 @@ func test_perks_load() -> void:
 
 
 ## 壊したデータを読ませて、エラーとして見つかることを確かめる
-func _expect_error(label: String, parts: Variant, perks: Variant, rules: Variant, needle: String) -> void:
+## stages を省くと data/stages.json をそのまま使う
+func _expect_error(label: String, parts: Variant, perks: Variant, rules: Variant, needle: String,
+		stages: Variant = null) -> void:
 	var data := GameData.new()
-	var ok: bool = data.load_from_values(parts, perks, rules)
+	var ok: bool = data.load_from_values(parts, perks, rules, stages if stages != null else _raw("stages.json"))
 	check(not ok, "%s：読み込みが失敗する" % label)
 	var joined: String = "\n".join(data.errors)
 	check(joined.contains(needle), "%s：エラーに「%s」が含まれる（実際：%s）" % [label, needle, joined])

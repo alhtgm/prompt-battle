@@ -58,7 +58,7 @@ func test_compact_observation_keeps_what_matters() -> void:
 	for k: int in 90:
 		sim.step()
 	var Observation := preload("res://core/observation.gd")
-	var obs: Dictionary = Observation.build(sim.robots[0], sim.robots[1], sim.now(), sim.time_left(), data.rules["battle"])
+	var obs: Dictionary = Observation.build(sim.robots[0], sim.robots[1], sim.now(), sim.time_left(), sim.battle_rules())
 	var c: Dictionary = LlmBrain.compact_observation(obs)
 	check(not c["me"].has("pos") and not c["me"].has("facing"), "位置と向きの数字は省く")
 	check(c["me"].has("hp") and c["enemy"].has("near_pit") and c.has("events"), "判断に使うものは残す")

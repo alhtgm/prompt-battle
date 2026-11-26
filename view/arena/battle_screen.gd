@@ -58,7 +58,7 @@ func build_ui() -> void:
 	container.add_child(vp)
 	arena = ArenaView.new()
 	vp.add_child(arena)
-	arena.setup(main.data)
+	arena.setup(main.data, watched_battle.sim.stage if watched_battle != null else {})
 	if watched_battle != null:
 		arena.bind(watched_battle.sim)
 	# アリーナだけに強い画面効果（ざらつき・色の段数・周辺の暗さ）をかける。文字の板はこの上に出す
@@ -91,6 +91,18 @@ func build_ui() -> void:
 		b.custom_minimum_size = Vector2(110, 36)
 		b.pressed.connect(spec[1])
 		row.add_child(b)
+	if main.is_dev_mode():
+		# 開発モード：設定画面に戻って編集する／同じ設定で最初からやり直す（両脇の板に隠れないよう、2段目に並べる）
+		var dev_row := HBoxContainer.new()
+		dev_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		dev_row.add_theme_constant_override("separation", 8)
+		top.add_child(dev_row)
+		for spec: Array in [["編集", main.open_dev_mode], ["やり直し", main.restart_dev_battle]]:
+			var b := Button.new()
+			b.text = spec[0]
+			b.custom_minimum_size = Vector2(110, 36)
+			b.pressed.connect(spec[1])
+			dev_row.add_child(b)
 	if OS.is_debug_build():
 		dev_camera_hint = _label(top, "", 13, COL_DIM)
 		dev_camera_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -243,7 +255,7 @@ func _fill_prompts() -> void:
 	var ids: Array = [watched_battle.a, watched_battle.b]
 	for i: int in 2:
 		var text: String = str(watched_battle.prompts[i])
-		if me_alive and ids[i] != main.human_id:
+		if me_alive and ids[i] != main.human_id and not main.is_dev_mode():
 			side_prompts[i].text = "プロンプト：（相手のものは見えない）"
 		else:
 			side_prompts[i].text = "プロンプト：%s" % (text if not text.is_empty() else "（なし）")
@@ -383,20 +395,21 @@ func refresh() -> void:
 	var names: Array = [sim.robots[0].name, sim.robots[1].name]
 	var spectating: String = "（観戦中）" if not s.get_player(main.human_id).alive else ""
 	var speed_text: String = "一時停止中" if main.dev_paused else "%s倍" % main.battle_speed
-	header.text = "ラウンド %d%s　%.1f 秒 / 残り %.1f 秒（%s）\n%s" % [
-		s.round_no, spectating, sim.now(), sim.time_left(), speed_text, main.agents.brain_status_text()]
+	header.text = "ラウンド %d・%s%s　%.1f 秒 / 残り %.1f 秒（%s）\n%s" % [
+		s.round_no, sim.stage.get("name", ""), spectating, sim.now(), sim.time_left(), speed_text, main.agents.brain_status_text()]
 	if sim.over:
 		var w: int = int(sim.result["winner"])
 		var all_over: bool = float(s.get("battle_end_left")) >= 0.0 if "battle_end_left" in s else false
 		header.text += "\n決着：%s（%s）・%s" % [
 			"引き分け" if w < 0 else "%s の勝ち" % names[w], UiText.REASON_LABELS.get(sim.result["reason"], ""),
-			"まもなく結果へ" if all_over else "ほかの試合を待っています"]
+			"「編集」か「やり直し」" if main.is_dev_mode() else ("まもなく結果へ" if all_over else "ほかの試合を待っています")]
 	for i: int in 2:
 		var r: Variant = sim.robots[i]
 		var state: String = "穴に落ちた" if r.fell else ("動けない！" if r.stun > 0.0 else UiText.INTENT_LABELS.get(r.intent, r.intent))
 		if float(r.get("fuse")) >= 0.0:
 			state += "　自爆まで %.1f 秒！" % float(r.get("fuse"))
-		side_names[i].text = "%s　HP %d / %d" % [r.name, roundi(r.hp), roundi(r.max_hp)]
+		side_names[i].text = "%s　HP %d / %d%s" % [r.name, roundi(r.hp), roundi(r.max_hp),
+			"（無限）" if "invincible" in sim and sim.invincible[i] else ""]
 		side_bars[i].max_value = r.max_hp
 		side_bars[i].value = r.hp
 		side_intents[i].text = "方針：%s" % state

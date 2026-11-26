@@ -19,6 +19,19 @@ static func roll_part(def: GameData.PartDef, rng: Rng, uid: int) -> PartInstance
 	return inst
 
 
+## 型から、ステータスを範囲の真ん中にした実物を作る（開発モードで装備を選ぶときに使う。乱数を使わない）
+static func middle_part(def: GameData.PartDef, uid: int) -> PartInstance:
+	var inst := PartInstance.new()
+	inst.uid = uid
+	inst.def_id = def.id
+	inst.kind = def.kind
+	for stat_name: String in def.stat_names():
+		var r: GameData.StatRange = def.stats[stat_name]
+		var mid: float = (r.min_value + r.max_value) * 0.5
+		inst.stats[stat_name] = snappedf(mid, r.step) if r.step > 0.0 else mid
+	return inst
+
+
 ## 小さいほど良いステータス（抽選の良さを測るときに向きを逆にする）
 const LOWER_IS_BETTER: Array[String] = ["speed_penalty"]
 

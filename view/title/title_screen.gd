@@ -74,6 +74,8 @@ func build_ui() -> void:
 	_menu_button(menu, "オンラインで遊ぶ", open_online)
 	_menu_button(menu, "遊び方", toggle_how_to)
 	_menu_button(menu, "観戦画面（開発用）", open_debug_viewer)
+	if OS.is_debug_build():
+		_menu_button(menu, "開発モード", open_dev_mode)
 	_menu_button(menu, "やめる", quit_game)
 	# 下は空けておき、3Dの機体が見えるようにする
 	_add_how_to()
@@ -210,6 +212,10 @@ func start() -> void:
 
 func open_online() -> void:
 	main.open_online()
+
+
+func open_dev_mode() -> void:
+	main.open_dev_mode()
 
 
 func open_debug_viewer() -> void:

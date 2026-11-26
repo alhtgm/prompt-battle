@@ -55,7 +55,7 @@ func _hold(sim: BattleSim) -> void:
 func test_packs_start_on_field_in_safe_places() -> void:
 	var data := _data()
 	var cfg: Dictionary = data.rules["battle"]["health_packs"]
-	var arena: Dictionary = data.rules["battle"]["arena"]
+	var arena: Dictionary = data.first_stage()
 	for seed_value: int in range(1, 30):
 		var sim := _sim(data, seed_value)
 		var act: Array = _active(sim)
@@ -151,16 +151,16 @@ func test_go_repair_heads_to_nearest_pack_and_observation_reports_it() -> void:
 	var en: Robot = sim.robots[1]
 	me.intent = "go_repair"
 	var nearest: Dictionary = RobotDriver.nearest_pack(me.x, me.z, sim.packs)
-	var c: Dictionary = RobotDriver.drive(me, en, data.rules["battle"], sim.packs)
+	var c: Dictionary = RobotDriver.drive(me, en, sim.battle_rules(), sim.packs)
 	var want: float = atan2(float(nearest["z"]) - me.z, float(nearest["x"]) - me.x)
 	check(absf(angle_difference(float(c["heading"]), want)) < 0.6, "「回復しに行く」は一番近いパックへ向かう")
-	var obs: Dictionary = Observation.build(me, en, 0.0, 75.0, data.rules["battle"], sim.packs)
+	var obs: Dictionary = Observation.build(me, en, 0.0, 75.0, sim.battle_rules(), sim.packs)
 	check(obs["repair"] is Dictionary, "戦況に一番近いパックが入る")
 	if obs["repair"] is Dictionary:
 		check(is_equal_approx(float(obs["repair"]["heal"]), float(nearest["heal"])), "回復量が分かる")
 	for p: Dictionary in sim.packs:
 		p["active"] = false
-	var obs2: Dictionary = Observation.build(me, en, 0.0, 75.0, data.rules["battle"], sim.packs)
+	var obs2: Dictionary = Observation.build(me, en, 0.0, 75.0, sim.battle_rules(), sim.packs)
 	check(obs2["repair"] == null, "場にパックがなければ null")
 
 
@@ -193,7 +193,7 @@ func test_pack_view_draws_and_reacts_to_pickup() -> void:
 
 func test_first_packs_are_at_fixed_spots() -> void:
 	var data := _data()
-	var initial: Array = data.rules["battle"]["health_packs"]["initial"]
+	var initial: Array = data.first_stage()["packs"]
 	check(initial.size() >= 2, "最初の場所が2つ決まっている（右上と左下）")
 	for seed_value: int in [1, 2, 3, 50]:
 		var sim := _sim(data, seed_value)

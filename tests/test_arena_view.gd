@@ -29,7 +29,7 @@ func _collect(node: Node, script_type: String, out: Array) -> void:
 func test_torches_stand_and_flicker_safely() -> void:
 	var arena: Node3D = _arena()
 	check_eq(arena.torches.size(), Look.TORCH_SPOTS.size(), "松明の数")
-	var half: float = float(arena.data.rules["battle"]["arena"]["half_size"])
+	var half: float = float(arena.stage["half_size"])
 	for t: Node3D in arena.torches:
 		var p: Vector3 = t.global_position
 		check(maxf(absf(p.x), absf(p.z)) > half, "松明は壁の外にある（%s）" % str(p))
