@@ -26,6 +26,14 @@ const ATOMS: Dictionary = {
 	"repair_ok": "修理ステーションでまだ回復できる",
 	"skill_ready": "スキルが使える",
 	"time_low": "残り20秒未満",
+	"enemy_charging": "相手がこちらへ突っ込んでくる",
+	"enemy_fleeing": "相手が離れていく",
+	"enemy_facing_me": "相手がこちらを向いている（正面に入っている）",
+	"me_near_wall": "自分が壁際",
+	"enemy_near_wall": "相手が壁際",
+	"winning": "HPの割合で相手に勝っている",
+	"losing": "HPの割合で相手に負けている",
+	"hit_given": "1.5秒以内に攻撃を当てた",
 }
 ## 画面のフローチャート用の短い言い方
 const ATOM_SHORT: Dictionary = {
@@ -36,6 +44,9 @@ const ATOM_SHORT: Dictionary = {
 	"enemy_behind_me": "背後をとられた", "behind_enemy": "敵の背後にいる",
 	"enemy_stunned": "敵が動けない", "hit_recent": "被弾した直後",
 	"repair_ok": "修理が残っている", "skill_ready": "スキル使用可", "time_low": "残り<20秒",
+	"enemy_charging": "敵が突っ込んでくる", "enemy_fleeing": "敵が離れていく", "enemy_facing_me": "敵がこちらを向いた",
+	"me_near_wall": "自分が壁際", "enemy_near_wall": "敵が壁際", "winning": "優勢", "losing": "劣勢",
+	"hit_given": "当てた直後",
 }
 const INTENT_SHORT: Dictionary = {
 	"charge": "突撃", "flank": "回り込み", "keep_distance": "距離を保つ", "retreat": "逃げる",
@@ -44,47 +55,98 @@ const INTENT_SHORT: Dictionary = {
 
 const HIT_RECENT_SEC: float = 1.5
 const TIME_LOW_SEC: float = 20.0
+const WALL_MARGIN: float = 3.0
+const FACING_DEG: float = 30.0
+const LEAD_RATIO: float = 0.1
 
-## [{"if": ["atom", ...], "do": "intent", "skill": int or -1}]（最後は if が空）
+## 上が作戦欄（lock=false）、下が土台（lock=true、最後は if が空の「いつも」）
 var rules: Array[Dictionary] = []
 
 
 static func default_rules() -> Array[Dictionary]:
 	var r: Array[Dictionary] = [
-		{"if": ["my_hp<30", "repair_ok"], "do": "go_repair", "skill": -1},
-		{"if": [], "do": "charge", "skill": -1},
+		make_rule(["my_hp<30", "repair_ok"], "go_repair", -1, true),
+		make_rule([], "charge", -1, true),
 	]
 	return r
 
 
-## LLM の答え（JSON）を読む。形が正しければルールの配列、壊れていれば空
-static func parse(rules_json: Variant, n_skills: int) -> Array[Dictionary]:
+## 同時には成り立たない条件の組
+const CONTRADICTIONS: Array = [
+	["near", "far"], ["touch", "far"], ["winning", "losing"], ["enemy_charging", "enemy_fleeing"],
+]
+
+
+## LLM の答え（JSON）を読む。形が正しければルールの配列、壊れていれば空。lock は土台（固定）かどうか
+static func parse(rules_json: Variant, n_skills: int, lock: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if not (rules_json is Array):
 		return out
 	for item: Variant in rules_json:
-		if not (item is Dictionary):
+		var r: Dictionary = parse_rule(item, n_skills, lock)
+		if r.is_empty():
 			return []
-		var conds: Array = []
-		var cond_text: String = str(item.get("if", ""))
-		if not cond_text.is_empty():
-			for a: String in cond_text.split("&"):
-				if not ATOMS.has(a):
-					return []
-				conds.append(a)
-		var intent: String = str(item.get("do", ""))
-		if not RobotDriver.INTENTS.has(intent):
-			return []
-		var sk: Variant = item.get("skill")
-		var skill: int = int(sk) if (sk is float or sk is int) and int(sk) >= 0 and int(sk) < n_skills else -1
-		out.append({"if": conds, "do": intent, "skill": skill})
+		out.append(r)
 	if out.is_empty() or not (out.back()["if"] as Array).is_empty():
-		out.append({"if": [], "do": "charge", "skill": -1})  # 「いつも」が抜けていたら足す
+		out.append(make_rule([], "charge", -1, lock))  # 「いつも」が抜けていたら足す
 	return out
 
 
+## ルール1つを読む。壊れていれば空
+static func parse_rule(item: Variant, n_skills: int, lock: bool = false) -> Dictionary:
+	if not (item is Dictionary):
+		return {}
+	var conds: Array = []
+	var cond_text: String = str(item.get("if", ""))
+	if not cond_text.is_empty():
+		for a: String in cond_text.split("&"):
+			if not ATOMS.has(a) or conds.has(a):
+				return {}
+			conds.append(a)
+	var intent: String = str(item.get("do", ""))
+	if not RobotDriver.INTENTS.has(intent):
+		return {}
+	var sk: Variant = item.get("skill")
+	var skill: int = int(sk) if (sk is float or sk is int) and int(sk) >= 0 and int(sk) < n_skills else -1
+	return make_rule(conds, intent, skill, lock)
+
+
+## ルールの形。sec・given・taken はそのルールを実行していた秒数と、そのあいだに与えた・受けたダメージ
+static func make_rule(conds: Array, intent: String, skill: int, lock: bool) -> Dictionary:
+	return {"if": conds, "do": intent, "skill": skill, "lock": lock, "sec": 0.0, "given": 0.0, "taken": 0.0}
+
+
+static func is_contradictory(conds: Array) -> bool:
+	for pair: Array in CONTRADICTIONS:
+		if conds.has(pair[0]) and conds.has(pair[1]):
+			return true
+	return false
+
+
+static func same_rule(a: Dictionary, b: Dictionary) -> bool:
+	var ca: Array = (a["if"] as Array).duplicate()
+	var cb: Array = (b["if"] as Array).duplicate()
+	ca.sort()
+	cb.sort()
+	return ca == cb and a["do"] == b["do"]
+
+
+## idx 番のルールを、上のどのルールが隠しているか（上のルールの条件がすべて含まれていれば、上が必ず先に選ばれる）。なければ -1
+func shadowed_by(idx: int) -> int:
+	var mine: Array = rules[idx]["if"]
+	for i: int in idx:
+		var ok: bool = true
+		for a: String in rules[i]["if"]:
+			if not mine.has(a):
+				ok = false
+				break
+		if ok:
+			return i
+	return -1
+
+
 ## 今の状況で当てはまる条件の集まりを作る（毎刻み）
-static func facts(me: Robot, en: Robot, t: float, time_left: float, battle: Dictionary, last_hit_t: float) -> Dictionary:
+static func facts(me: Robot, en: Robot, t: float, time_left: float, battle: Dictionary, last_hit_t: float, last_give_t: float) -> Dictionary:
 	var ex: float = en.x - me.x
 	var ez: float = en.z - me.z
 	var d: float = sqrt(ex * ex + ez * ez)
@@ -92,6 +154,10 @@ static func facts(me: Robot, en: Robot, t: float, time_left: float, battle: Dict
 	var hp: float = me.hp_ratio() * 100.0
 	var ehp: float = en.hp_ratio() * 100.0
 	var ammo: Variant = me.ammo_total()
+	var to_me := Vector2(-ex, -ez) / maxf(d, 0.001)
+	var closing: float = Vector2(en.vx, en.vz).dot(to_me)  # 相手がこちらへ近づく速さ
+	var half: float = float(battle["arena"]["half_size"]) - WALL_MARGIN
+	var lead: float = me.hp_ratio() - en.hp_ratio()
 	var any_ready: bool = false
 	for s: Robot.SkillSlot in me.skills:
 		if s.is_ready():
@@ -109,6 +175,14 @@ static func facts(me: Robot, en: Robot, t: float, time_left: float, battle: Dict
 		"repair_ok": me.repair_left > 0.0,
 		"skill_ready": any_ready,
 		"time_low": time_left < TIME_LOW_SEC,
+		"enemy_charging": closing > 0.4 * en.max_speed,
+		"enemy_fleeing": closing < -0.3 * en.max_speed,
+		"enemy_facing_me": absf(angle_difference(en.th, atan2(-ez, -ex))) < deg_to_rad(FACING_DEG),
+		"me_near_wall": absf(me.x) > half or absf(me.z) > half,
+		"enemy_near_wall": absf(en.x) > half or absf(en.z) > half,
+		"winning": lead > LEAD_RATIO,
+		"losing": lead < -LEAD_RATIO,
+		"hit_given": t - last_give_t < HIT_RECENT_SEC,
 	}
 
 
