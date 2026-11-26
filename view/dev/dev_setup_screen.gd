@@ -73,7 +73,8 @@ func _build_stage_column(col: VBoxContainer) -> void:
 	stage_map.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	col.add_child(stage_map)
 
-	add_label("ギミック（そのステージにあるものだけ選べる）", 18, COL_ACCENT, col)
+	if not GameData.GIMMICKS.is_empty():
+		add_label("ギミック（そのステージにあるものだけ選べる）", 18, COL_ACCENT, col)
 	for key: String in GameData.GIMMICKS:
 		var b := CheckBox.new()
 		b.toggled.connect(func(on: bool) -> void: set_gimmick(key, on))

@@ -108,13 +108,9 @@ const NUMBER_RULES: Array = [
 ]
 
 ## ステージのギミック（stages.json の各ステージに書く項目 → 名前）。docs/design.md「ステージとギミック」
-## 配列の項目は空なら「ない」、sudden_death は true なら「ある」
-const GIMMICKS: Dictionary = {
-	"bounce_walls": "バウンド壁",
-	"warps": "ワープ床",
-	"belts": "コンベア床",
-	"sudden_death": "サドンデス",
-}
+## 配列の項目は空なら「ない」、true/false の項目は true なら「ある」。
+## ギミックは見送りになったので、今は何もない。足すときはここに書くと、開発モードでオン・オフを選べるようになる
+const GIMMICKS: Dictionary = {}
 
 ## 引き分けのときのダメージの扱い
 const DRAW_DAMAGE_MODES: Array[String] = ["none", "rank_only"]

@@ -1,5 +1,6 @@
 # ステージの土台のテスト。docs/design.md「ステージとギミックの順番」の1段階目の完成の目安を確かめる。
 # 全ステージが検査を通る、同じ種なら同じステージの並びになる、バトルと通信対戦の写しがそのラウンドのステージを使う。
+# 今のステージは標準の1つだけなので、ラウンドごとの選び方は、テストの中で2つ目のステージを足して確かめる。
 extends "res://tests/support/test_case.gd"
 
 const GameData := preload("res://core/game_data.gd")
@@ -23,6 +24,21 @@ func _data() -> GameData:
 
 func _raw(file: String) -> Variant:
 	return JSON.parse_string(FileAccess.get_file_as_string("res://data/" + file))
+
+
+## 標準に、穴を左右反対にしたテスト用のステージを足したデータ
+func _two_stage_data() -> GameData:
+	var stages: Dictionary = _raw("stages.json")
+	var extra: Dictionary = (stages["stages"][0] as Dictionary).duplicate(true)
+	extra["id"] = "test_mirror"
+	extra["name"] = "テスト用"
+	extra["pits"] = [{"x": 4, "z": -7, "r": 2.4}, {"x": -4, "z": 7, "r": 2.4}]
+	stages["stages"].append(extra)
+	var data := GameData.new()
+	check(data.load_from_values(_raw("parts.json"), _raw("perks.json"), _raw("rules.json"), stages),
+		"テスト用のステージを足しても読める：%s" % "
+".join(data.errors))
+	return data
 
 
 func _cpu_match(data: GameData, seed_value: int) -> MatchSession:
@@ -65,7 +81,7 @@ func test_all_stages_load() -> void:
 	var ids: Array = []
 	for st: Dictionary in data.stages:
 		ids.append(st["id"])
-	check_eq(ids, ["standard", "warp", "pinball", "conveyor"], "docs/design.md の4つのステージがある")
+	check_eq(ids, ["standard"], "今は標準のステージだけ（ギミックとほかのステージは見送り）")
 	check_eq(data.first_stage_id, "standard", "1ラウンド目は標準")
 
 
@@ -93,7 +109,7 @@ func test_broken_stages_are_rejected() -> void:
 	s["first"] = "nowhere"
 	_expect_stage_error("first が知らないID", s, "first")
 	s = good.duplicate(true)
-	s["stages"][1]["id"] = "standard"
+	s["stages"].append((s["stages"][0] as Dictionary).duplicate(true))
 	_expect_stage_error("IDの重複", s, "id")
 	s = good.duplicate(true)
 	s["stages"][0]["pits"] = []
@@ -114,7 +130,7 @@ func test_broken_stages_are_rejected() -> void:
 
 
 func test_same_seed_same_stage_sequence() -> void:
-	var data := _data()
+	var data := _two_stage_data()
 	var seen: Dictionary = {}
 	for seed_value: int in [5, 6, 7]:
 		var a: Array = _stage_sequence(data, seed_value)
@@ -139,7 +155,7 @@ func test_one_stage_only_repeats_it() -> void:
 
 
 func test_battles_use_the_round_stage() -> void:
-	var data := _data()
+	var data := _two_stage_data()
 	var s := _cpu_match(data, 11)
 	s.finish_draft()
 	var checked: int = 0
@@ -191,7 +207,7 @@ func test_every_stage_plays_sanely() -> void:
 
 
 func test_online_copy_uses_the_stage() -> void:
-	var data := _data()
+	var data := _two_stage_data()
 	var s := _cpu_match(data, 21)
 	s.finish_draft()
 	var guard: int = 0

@@ -27,8 +27,9 @@ static func load_data() -> GameData:
 	return data
 
 
-## 種から試合を1つ作る。機体・プロンプト・頭脳の乱数はすべて種から分けて作る
-static func make_match(data: GameData, seed_value: int) -> BattleSim:
+## 種から試合を1つ作る。機体・プロンプト・頭脳の乱数はすべて種から分けて作る。
+## stage を省くと最初のステージ。同じ種なら、ステージが違っても機体とプロンプトは同じになる
+static func make_match(data: GameData, seed_value: int, stage: Dictionary = {}) -> BattleSim:
 	var root := Rng.new(seed_value)
 	var setup: Rng = root.fork("setup")
 	var builds: Array = [
@@ -37,4 +38,4 @@ static func make_match(data: GameData, seed_value: int) -> BattleSim:
 	]
 	var prompts: Array = [setup.pick(PROMPTS), setup.pick(PROMPTS)]
 	var brains: Array = [MockBrain.new(root.fork("brain/0")), MockBrain.new(root.fork("brain/1"))]
-	return BattleSim.new(data, builds, brains, prompts, ["A", "B"], root.fork("battle"))
+	return BattleSim.new(data, builds, brains, prompts, ["A", "B"], root.fork("battle"), stage)

@@ -43,14 +43,14 @@ func _find_button(node: Node, text: String) -> Button:
 func test_session_follows_the_setup() -> void:
 	var data := _data()
 	var s: Dictionary = DevSession.default_setup(data)
-	s["stage_id"] = "pinball"
+	s["stage_id"] = "standard"
 	s["builds"][0] = {"frame": "frame_heavy", "weapons": ["weapon_hammer", "weapon_mg"], "skills": ["skill_shield"]}
 	s["builds"][1] = {"frame": "frame_light", "weapons": ["weapon_spike"], "skills": []}
 	s["prompts"] = ["距離をとって撃て", "突撃しろ"]
 	check_eq(DevSession.check_setup(data, s), "", "正しい設定なら始められる")
 	var dev := DevSession.new(data, DefaultAgents.new(false), s)
 	var sim: Variant = dev.battles[0].sim
-	check_eq(sim.stage["id"], "pinball", "選んだステージ")
+	check_eq(sim.stage["id"], "standard", "選んだステージ")
 	check_eq(sim.robots[0].build.part_def_ids(), ["frame_heavy", "weapon_hammer", "weapon_mg", "skill_shield"], "自分の装備")
 	check_eq(sim.robots[1].build.part_def_ids(), ["frame_light", "weapon_spike"], "相手の装備")
 	check_eq(dev.battles[0].prompts, ["距離をとって撃て", "突撃しろ"], "両機のプロンプト")
@@ -75,20 +75,17 @@ func test_setup_problems_are_reported() -> void:
 
 
 func test_gimmicks_can_be_turned_off() -> void:
+	# ギミックは見送りになったので、今はどのステージにもない。外すしくみ（gimmicks_off）は、ギミックを足したときに使う
 	var data := _data()
-	# ギミックはまだステージに置いていないので、置いたステージを作って確かめる
-	var st: Dictionary = data.get_stage("standard").duplicate(true)
-	st["warps"] = [{"a": {"x": -12, "z": -12}, "b": {"x": 12, "z": 12}}]
-	st["sudden_death"] = true
-	check_eq(GameData.stage_gimmicks(st), ["warps", "sudden_death"], "置いたギミックが分かる")
+	check(GameData.GIMMICKS.is_empty(), "ギミックはまだない")
+	for st: Dictionary in data.stages:
+		check(GameData.stage_gimmicks(st).is_empty(), "%s：ギミックがない" % st["id"])
 	var s: Dictionary = DevSession.default_setup(data)
-	s["stage"] = st
-	s["gimmicks_off"] = ["warps"]
+	s["gimmicks_off"] = ["warps"]  # 知らないギミックの名前は無視する
 	var made: Dictionary = DevSession.make_stage(data, s)
-	check_eq(GameData.stage_gimmicks(made), ["sudden_death"], "外したギミックだけがなくなる")
-	check_eq(GameData.stage_gimmicks(st), ["warps", "sudden_death"], "元のステージは変わらない")
+	check_eq(made, data.get_stage(str(s["stage_id"])), "知らないギミックを外しても、ステージは変わらない")
 	var dev := DevSession.new(data, DefaultAgents.new(false), s)
-	check(not GameData.stage_has_gimmick(dev.battles[0].sim.stage, "warps"), "バトルにも外したステージが渡る")
+	check_eq(dev.battles[0].sim.stage, made, "バトルに設定のステージが渡る")
 
 
 func test_invincible_and_no_time_limit() -> void:
@@ -155,8 +152,8 @@ func test_screens_title_setup_battle_edit_restart() -> void:
 	await _frame()
 	check(main.screen is DevSetupScreen, "開発モードの設定画面が出る")
 	var setup_screen: Node = main.screen
-	setup_screen.set_stage("pinball")
-	check(setup_screen.gimmick_boxes["warps"].disabled, "ステージにないギミックは選べない")
+	setup_screen.set_stage("standard")
+	check(setup_screen.gimmick_boxes.is_empty(), "ギミックがないので、ギミックの欄は出ない")
 	setup_screen.set_frame(1, "frame_light")
 	setup_screen.set_parts(1, ["weapon_hammer", "weapon_spike", "weapon_mg", "weapon_saw"], [])
 	check(setup_screen.start_button.disabled, "装備に問題があれば開始できない")
@@ -169,8 +166,8 @@ func test_screens_title_setup_battle_edit_restart() -> void:
 	await _frame()
 	check(main.screen is BattleScreen, "3Dのバトル画面になる")
 	var b: Node = main.screen
-	check_eq(b.watched_battle.sim.stage["id"], "pinball", "選んだステージで戦う")
-	check_eq(b.arena.stage["id"], "pinball", "3Dのアリーナも選んだステージ")
+	check_eq(b.watched_battle.sim.stage["id"], "standard", "選んだステージで戦う")
+	check_eq(b.arena.stage["id"], "standard", "3Dのアリーナも選んだステージ")
 	check(b.side_names[0].text.contains("無限"), "HP無限が画面に出る")
 	var edit: Button = _find_button(b, "編集")
 	var again: Button = _find_button(b, "やり直し")
@@ -185,7 +182,7 @@ func test_screens_title_setup_battle_edit_restart() -> void:
 	_find_button(main.screen, "編集").pressed.emit()
 	await _frame()
 	check(main.screen is DevSetupScreen, "編集で設定画面に戻る")
-	check_eq(main.screen.stage_select.selected, 2, "選んだステージが残っている")
+	check_eq(main.screen.stage_select.selected, 0, "選んだステージ（標準）が選ばれている")
 	check_eq(main.screen.prompt_edits[1].text, "相手の周りを回れ", "書いたプロンプトが残っている")
 	main.show_title()
 	await _frame()
