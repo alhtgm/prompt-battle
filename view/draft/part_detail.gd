@@ -24,12 +24,13 @@ var note_label: Label
 var _stat_font: int = 15
 
 
-## kind の種類の札を付けた欄を作る。stat_font はステータスの表の文字の大きさ
-func setup(game_data: GameData, part_kind: String, stat_font: int = 15) -> void:
+## kind の種類の札を付けた欄を作る。stat_font はステータスの表の文字の大きさ。
+## compact なら行の間を詰める（組み立て画面の下の帯で、長い説明でも1画面に収めるため）
+func setup(game_data: GameData, part_kind: String, stat_font: int = 15, compact: bool = false) -> void:
 	data = game_data
 	kind = part_kind
 	_stat_font = stat_font
-	add_theme_constant_override("separation", 3)
+	add_theme_constant_override("separation", 1 if compact else 3)
 	add_child(HSeparator.new())
 	var kind_col: Color = Look.KIND_COLORS.get(kind, Look.UI_TEXT)
 	var head := HBoxContainer.new()
@@ -55,10 +56,14 @@ func setup(game_data: GameData, part_kind: String, stat_font: int = 15) -> void:
 	stats_box = GridContainer.new()
 	stats_box.columns = 3
 	stats_box.add_theme_constant_override("h_separation", 10)
-	stats_box.add_theme_constant_override("v_separation", 2)
+	stats_box.add_theme_constant_override("v_separation", 0 if compact else 2)
 	add_child(stats_box)
 	fixed_label = _label(self, "", 13, COL_DIM)
 	fixed_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if compact:
+		# DotGothic16 は行が高いので、折り返した行の間を詰める
+		desc_label.add_theme_constant_override("line_spacing", Look.GARAGE_DETAIL_LINE_SPACING)
+		fixed_label.add_theme_constant_override("line_spacing", Look.GARAGE_DETAIL_LINE_SPACING)
 
 
 ## パーツ p の性能を書く。fits が false なら「このフレームには付けられない」と出す

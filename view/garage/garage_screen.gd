@@ -75,7 +75,20 @@ var perk_tags: Array[Label] = []
 
 
 func build_ui() -> void:
-	add_title("ラウンド %d：組み立てとプロンプト" % session().round_no)
+	# 見出しの行の右の空きに操縦士の状態を出す（右の列を短くして、下の帯まで1画面に収めるため）
+	var title: Label = add_title("ラウンド %d：組み立てとプロンプト" % session().round_no)
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 16)
+	box.remove_child(title)
+	box.add_child(top)
+	top.add_child(title)
+	_brain = add_label("", 15, COL_DIM, top)
+	_brain.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_brain.clip_text = true
+	_brain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_brain.size_flags_vertical = Control.SIZE_SHRINK_END
+	_brain.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	fuse = FuseBar.new()
 	box.add_child(fuse)
 	fuse.update(session().phase_time_left, 0.0)  # 最初のコマから満タンで出す
@@ -128,11 +141,15 @@ func build_ui() -> void:
 	_slots.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# 右：残り時間、プロンプト、出撃、体力の一覧
-	# 1画面に収めるため、説明は短くまとめ、エラーは出撃ボタンの横、体力は2列に並べる
-	_brain = add_label("", 15, COL_DIM, right)
-	add_label("操縦士へのプロンプト", 22, COL_ACCENT, right)
-	add_label("時間切れになると前の機体で出撃", 14, COL_DIM, right)
+	# 右：プロンプト、出撃、体力の一覧
+	# 1画面に収めるため、説明は見出しの横に短く、エラーは出撃ボタンの横、体力は2列に並べる
+	var prompt_head := HBoxContainer.new()
+	prompt_head.add_theme_constant_override("separation", 16)
+	right.add_child(prompt_head)
+	add_label("操縦士へのプロンプト", 22, COL_ACCENT, prompt_head).autowrap_mode = TextServer.AUTOWRAP_OFF
+	var hint: Label = add_label("時間切れになると前の機体で出撃", 14, COL_DIM, prompt_head)
+	hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var examples := HFlowContainer.new()
 	examples.add_theme_constant_override("h_separation", 6)
 	examples.add_theme_constant_override("v_separation", 6)
@@ -363,7 +380,7 @@ func _refresh_stats() -> void:
 		var d: PartDetail = PartDetail.new()
 		d.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_stats.add_child(d)
-		d.setup(main.data, part.kind, 14)
+		d.setup(main.data, part.kind, 14, true)
 		d.show_part(part)
 		if two_rows:
 			d.desc_label.visible = false

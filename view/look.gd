@@ -320,6 +320,8 @@ const GARAGE_CARD_SIZE := Vector2(260, 112)
 const GARAGE_HEADER_FONT: int = 18
 ## 組み立て画面の下の帯に、付けたパーツの詳しい性能を横に何個並べるか
 const GARAGE_DETAIL_COLUMNS: int = 4
+## 下の帯の説明文の行の間（負の値で詰める。DotGothic16 の 14px は1行 24px あり、そのままだと長い説明で画面からはみ出す）
+const GARAGE_DETAIL_LINE_SPACING: int = -4
 const DRAFT_SIDE_SCALE: float = 0.8
 const DRAFT_SIDE_OFFSET: float = 210.0
 const DRAFT_SIDE_DIM: float = 0.45

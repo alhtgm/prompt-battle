@@ -6,6 +6,9 @@ const MatchSession := preload("res://core/match_session.gd")
 const TitleScreen := preload("res://view/title/title_screen.gd")
 const DraftScreen := preload("res://view/draft/draft_screen.gd")
 const LootScreen := preload("res://view/draft/loot_screen.gd")
+const PartCard := preload("res://view/draft/part_card.gd")
+const Loot := preload("res://core/loot.gd")
+const Rng := preload("res://core/rng.gd")
 const GarageScreen := preload("res://view/garage/garage_screen.gd")
 const BattleScreen := preload("res://view/arena/battle_screen.gd")
 const UiText := preload("res://view/ui_text.gd")
@@ -526,5 +529,57 @@ func test_scrap_screens() -> void:
 	check_eq(l.perk_cards.size(), me.perk_choices.size(), "新しい候補のカードが並ぶ")
 	for i: int in me.perk_choices.size():
 		check_eq(l.perk_cards[i].perk_id, me.perk_choices[i], "カードは新しい候補（%d）" % i)
+	main.queue_free()
+	await _frame()
+
+
+## 長い文が枠や画面からはみ出さない：組み立て画面の下の帯（説明がいちばん長い組み合わせ）と、配られたパーツのカードのステータス
+func test_long_texts_stay_inside() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var main: Node = load("res://view/main.tscn").instantiate()
+	main.use_llm = false
+	tree.root.add_child(main)
+	await _frame()
+	main.start_game(777)
+	await _frame()
+	var offer: Dictionary = main.session.draft_offer
+	for kind: String in ["frame", "weapon", "skill"]:
+		main.screen.select(kind, offer[kind][0].uid)
+	main.screen.confirm()
+	await _frame()
+	var g: Node = main.screen
+	check(_is(g, GarageScreen), "組み立ての画面")
+	var me: Variant = main.session.get_player(0)
+	var rng := Rng.new(5)
+	var uids: Array[int] = []
+	var ids: Array[String] = ["frame_heavy", "weapon_drill", "weapon_harpoon", "skill_shockwave"]
+	for i: int in ids.size():
+		var part: Variant = Loot.roll_part(main.data.get_part(ids[i]), rng, 9000 + i)
+		me.hand.append(part)
+		uids.append(part.uid)
+	g.set_selection(uids[0], [uids[1], uids[2]], [uids[3]])
+	g._build_sections()
+	g._update_info()
+	await _frame()
+	_check_fits(g, "組み立ての画面（説明の長いハープーンガンを付けたとき）")
+	# 配られたパーツのカード：比べる印が付いてステータスが長くなっても、カードの中に収まり、右下の札に重ならない
+	var holder := Control.new()
+	tree.root.add_child(holder)
+	for def: Variant in main.data.parts:
+		var def_id: String = def.id
+		var p: Variant = Loot.roll_part(def, rng, 9500)
+		var other: Variant = Loot.roll_part(def, rng, 9501)
+		var card: Variant = PartCard.new()
+		holder.add_child(card)
+		card.setup(main.data, p, null, "NEW", other)
+		card.size = PartCard.CARD_SIZE
+		await _frame()
+		var card_r := Rect2(Vector2.ZERO, card.size)
+		var sl: RichTextLabel = card.stats_label
+		var stats_r := Rect2(sl.position + sl.get_parent().position, Vector2(sl.get_content_width(), sl.get_content_height()))
+		check(card_r.encloses(stats_r), "配られたパーツのカードのステータスが枠に収まる（%s）" % def_id)
+		check(not stats_r.intersects(card._mark.get_rect()), "ステータスが右下の札に重ならない（%s）" % def_id)
+		card.queue_free()
+	holder.queue_free()
 	main.queue_free()
 	await _frame()

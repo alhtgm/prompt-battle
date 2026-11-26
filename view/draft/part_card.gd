@@ -19,6 +19,11 @@ var stats_label: RichTextLabel
 ## いつも札を出しておくか
 var always_badge: bool = false
 var _mark: Label
+## ステータスを1行に並べた文と、1つずつ改行した文（幅に収まらなければ改行した方を出す）
+var _stats_one_line: String = ""
+var _stats_stacked: String = ""
+## 幅を測るための文（色の指定を除いたもの）
+var _stats_plain: String = ""
 
 
 ## group が null なら選べないカード（見るだけ）。badge は右下の札（"NEW" など）。
@@ -54,9 +59,16 @@ func setup(data: GameData, p: PartInstance, group: ButtonGroup, badge: String = 
 	name_label = _label(box, data.get_part(p.def_id).name, 20, Look.UI_TEXT)
 	_label(box, UiText.part_tagline(data, p), 14, kind_col.darkened(0.1))
 	var stats := PackedStringArray()
+	var plain := PackedStringArray()
 	var def: GameData.PartDef = data.get_part(p.def_id)
 	for s: String in def.stat_names():
-		stats.append(UiText.stat_text(s, p.get_stat(s)) + _compare_mark(s, p, compare))
+		var mark: String = _compare_mark(s, p, compare)
+		stats.append(UiText.stat_text(s, p.get_stat(s)) + mark)
+		plain.append(UiText.stat_text(s, p.get_stat(s)) + (" ▲" if not mark.is_empty() else ""))
+	_stats_one_line = " / ".join(stats)
+	_stats_stacked = "
+".join(stats)
+	_stats_plain = " / ".join(plain)
 	stats_label = RichTextLabel.new()
 	stats_label.bbcode_enabled = true
 	stats_label.fit_content = true
@@ -65,16 +77,16 @@ func setup(data: GameData, p: PartInstance, group: ButtonGroup, badge: String = 
 	stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stats_label.add_theme_font_size_override("normal_font_size", 14)
 	stats_label.add_theme_color_override("default_color", Color(0.62, 0.6, 0.55))
-	stats_label.text = " / ".join(stats)
+	stats_label.text = _stats_one_line
 	box.add_child(stats_label)
-	# 選んでいる印（カードの下。名前に重ならないように、残りの高さを空けてから置く）
-	var fill := Control.new()
-	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(fill)
-	_mark = _label(box, badge if not badge.is_empty() else "選択中", 13, Color.BLACK)
-	_mark.size_flags_horizontal = Control.SIZE_SHRINK_END
+	# 選んでいる印（カードの右下の角に重ねて置く。行を取らないので、ステータスが2行になっても枠からはみ出さない）
+	_mark = _label(self, badge if not badge.is_empty() else "選択中", 13, Color.BLACK)
 	_mark.clip_text = false
+	_mark.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE)
+	_mark.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_mark.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_mark.offset_right = -10
+	_mark.offset_bottom = -8
 	var ms := StyleBoxFlat.new()
 	ms.bg_color = Look.UI_ACCENT
 	ms.content_margin_left = 8
@@ -85,10 +97,22 @@ func setup(data: GameData, p: PartInstance, group: ButtonGroup, badge: String = 
 	if not badge.is_empty():
 		always_badge = true
 	toggled.connect(func(on: bool) -> void: _mark.modulate.a = 1.0 if on or always_badge else 0.0)
+	resized.connect(_fit_stats)
+	_fit_stats()
 	mouse_entered.connect(func() -> void: hovered.emit(self))
 	focus_entered.connect(func() -> void: hovered.emit(self))
 	mouse_exited.connect(func() -> void: unhovered.emit(self))
 	focus_exited.connect(func() -> void: unhovered.emit(self))
+
+
+## ステータスが1行でカードの幅に収まらなければ、1つずつ改行して出す（カードの大きさは置く側が後から決めるので、大きさが変わるたびに見直す）
+func _fit_stats() -> void:
+	var width: float = maxf(size.x, custom_minimum_size.x) - 22.0  # 左右の余白（12 と 10）
+	var font: Font = load(Look.UI_FONT_PATH)
+	var need: float = font.get_string_size(_stats_plain, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	var text: String = _stats_one_line if need <= width else _stats_stacked
+	if stats_label.text != text:
+		stats_label.text = text
 
 
 ## 比べる相手と同じステータスがあれば、良ければ緑の▲、悪ければ赤の▼（小さいほど良いものは逆）

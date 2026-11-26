@@ -10,4 +10,7 @@ if not exist "%GODOT%" (
     exit /b 1
   )
 )
+rem Import fonts, models and images first. Without this, new assets (or a fresh clone with no .godot folder) fail to load.
+echo Importing assets...
+"%GODOT%" --headless --path "%~dp0." --import
 start "" "%GODOT%" --path "%~dp0."

@@ -38,7 +38,7 @@ func build_ui() -> void:
 	add_title("ラウンド %d：パーツ配布とパーク" % session().round_no)
 	_add_fuse()
 	# 配られたパーツ・パークのカード・決定ボタンは、画面の横の真ん中にそろえる（見出しも合わせて真ん中に置く）
-	var parts_head: Label = add_label("配られたパーツ（手持ちに加わった。▲▼ は今付けているパーツとの比べ）", 20, COL_ACCENT)
+	var parts_head: Label = add_label("配られたパーツ", 20, COL_ACCENT)
 	parts_head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
