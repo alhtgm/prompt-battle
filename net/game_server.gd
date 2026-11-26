@@ -33,6 +33,8 @@ var _shown_round: int = -1
 var _state_accum: float = 0.0
 var _frame_accum: float = 0.0
 var _last_sent: Dictionary = {}
+## バトルを始めるまでの残り（サーバーの時間の秒）。全員が出撃してからこの間はバトルを進めない（シャッターの演出の分）
+var _start_hold: float = 0.0
 
 
 ## 待ち受けを始める。問題がなければ OK
@@ -119,6 +121,10 @@ func _on_packet(peer_id: int, packet: PackedByteArray) -> void:
 			_op(peer_id, func(pid: int) -> String:
 				return session.submit_build(pid, int(msg.get("frame", -1)), _arr(msg.get("weapons")),
 					_arr(msg.get("skills")), str(msg.get("prompt", ""))))
+		Protocol.CANCEL_BUILD:
+			# バトルに移ったあとに届いた取り消しは、サーバーの決定を正として黙って無視する
+			if session != null and session.phase == MatchSession.PHASE_BUILD:
+				_op(peer_id, func(pid: int) -> String: return session.cancel_build(pid))
 		Protocol.CHOOSE_PERK:
 			_op(peer_id, func(pid: int) -> String: return session.choose_perk(pid, str(msg.get("perk", ""))))
 		Protocol.SCRAP_PART:
@@ -221,8 +227,13 @@ func _process(delta: float) -> void:
 			_timer -= d
 			if _timer <= 0.0:
 				session.finish_draft()
-		MatchSession.PHASE_BUILD, MatchSession.PHASE_BATTLE:
+		MatchSession.PHASE_BUILD:
 			session.update(d)
+		MatchSession.PHASE_BATTLE:
+			if _start_hold > 0.0:
+				_start_hold = maxf(0.0, _start_hold - d)  # 開始までの待ちの間はバトルを進めない
+			else:
+				session.update(d)
 		MatchSession.PHASE_ROUND_RESULT:
 			_timer -= d
 			if _timer <= 0.0:
@@ -259,6 +270,7 @@ func _on_phase_change() -> void:
 		MatchSession.PHASE_ROUND_RESULT: _timer = float(_online["result_view_sec"])
 		MatchSession.PHASE_LOOT: _timer = float(_online["perk_time_limit_sec"])
 		MatchSession.PHASE_FINISHED: _timer = float(_online["final_view_sec"])
+		MatchSession.PHASE_BATTLE: _start_hold = float(_online["battle_start_delay_sec"])
 	_send_states(true)
 	if session.phase == MatchSession.PHASE_BATTLE:
 		_broadcast(Protocol.FRAME, Protocol.battle_frame(session, int(_online["frame_log_entries"])))
@@ -289,13 +301,20 @@ func _time_left() -> float:
 	return _timer / time_scale
 
 
+## バトルが始まるまでの残り秒数（実時間。バトルの段階で待っている間だけ 0 より大きい）
+func _start_left() -> float:
+	if session.phase == MatchSession.PHASE_BATTLE:
+		return _start_hold / time_scale
+	return 0.0
+
+
 ## 各クライアントに、その人から見える試合の状態を送る（変わっていなければ送らない）
 func _send_states(force: bool) -> void:
 	for pid: Variant in peer_of:
 		var peer_id: int = int(peer_of[pid])
 		if peer_id <= 0:
 			continue
-		var st: Dictionary = Protocol.session_state(session, int(pid), {"time_left": _time_left()})
+		var st: Dictionary = Protocol.session_state(session, int(pid), {"time_left": _time_left(), "start_left": _start_left()})
 		var bytes: PackedByteArray = Protocol.encode(Protocol.STATE, st)
 		var h: int = hash(bytes)
 		if force or _last_sent.get(peer_id, 0) != h:

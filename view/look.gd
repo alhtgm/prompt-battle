@@ -456,3 +456,93 @@ const DEV_CAM_ORBIT_PER_PX: float = 0.006
 const DEV_CAM_PAN_PER_PX: float = 0.0016
 const DEV_CAM_ZOOM_STEP: float = 0.88
 const DEV_CAM_KEY_PAN: float = 0.9
+
+# ---- 出撃のシャッター（view/shutter.gd と view/shaders/shutter.gdshader、動かすのは view/main.gd） ----
+# 動きの時間（合計はこの値どおり）
+## 閉じる秒数（重く加速しながら一気に落ちる。跳ねない）
+const SHUTTER_CLOSE_SEC: float = 0.55
+## 閉じきったときの重い揺れ：秒数と、下へ沈む深さ（点）。沈んで戻る1回だけ（時間の関数で、乱数は使わない）
+const SHUTTER_SHAKE_SEC: float = 0.3
+const SHUTTER_SINK_PX: float = 7.0
+## 閉じきって揺れが収まってから、開き始めるまで閉じたままでいる秒数（1人用。通信対戦は開始の時刻に合わせて開くので、
+## data/rules.json の online.battle_start_delay_sec から閉じる・揺れ・開くの時間を引いた分だけ閉じている）
+const SHUTTER_CLOSED_HOLD_SEC: float = 0.6
+## 開く秒数。最初の SHUTTER_OPEN_ACCEL_RATIO（開く時間の割合）は重そうに加速し、そのあとは一定の速さで巻き上げる
+const SHUTTER_OPEN_SEC: float = 0.7
+const SHUTTER_OPEN_ACCEL_RATIO: float = 0.3
+## 通信対戦で開始に間に合わないとき、閉じる・開くを速める倍率の上限
+const SHUTTER_MAX_SPEED: float = 8.0
+## 1フレームで進める動きの上限（秒）。画面の作り直しなどで1フレームが長くなっても、動きを飛ばさない
+const SHUTTER_MAX_STEP_SEC: float = 1.0 / 30.0
+
+# 板金（すべて低い解像度で描く。点の大きさは PIXEL_SHRINK）
+## 地の鉄の色（くすんだ灰色）。全体の暗さはここと光の強さで決まる
+const SHUTTER_STEEL := Color(0.17, 0.168, 0.16)
+## 板1枚の高さの基準（点）と、板ごとの不ぞろいの幅（基準に対する割合）。幅は板の番号から決まる式で作る
+const SHUTTER_SLAT_PX: float = 36.0
+const SHUTTER_SLAT_VARY: float = 0.22
+## 継ぎ目の溝の深さ（点）と暗さ（0〜1。1で真っ黒）、各板の上の縁のハイライトの強さ、板の下へ向かう陰り
+const SHUTTER_GAP_PX: float = 4.0
+const SHUTTER_GAP_DARK: float = 0.9
+const SHUTTER_HIGHLIGHT: float = 0.35
+const SHUTTER_SLAT_SHADE: float = 0.35
+## 色むらの強さ（大きめのノイズ）
+const SHUTTER_MOTTLE: float = 0.35
+## 錆：色、強さ、出始めるしきい値（小さいほど広い）、板の下の縁から溜まる距離（点）
+const SHUTTER_RUST := Color(0.3, 0.13, 0.06)
+const SHUTTER_RUST_STRENGTH: float = 0.55
+const SHUTTER_RUST_THRESHOLD: float = 0.76
+const SHUTTER_RUST_EDGE_PX: float = 10.0
+## こすれ傷（横に伸びた細い模様）：出るしきい値と明るさ
+const SHUTTER_SCRATCH_THRESHOLD: float = 0.7
+const SHUTTER_SCRATCH: float = 0.12
+## 油じみ（暗い斑点）：出るしきい値（大きいほど少ない）と暗さ
+const SHUTTER_OIL_THRESHOLD: float = 0.68
+const SHUTTER_OIL_DARK: float = 0.55
+## へこんだ板：[板の番号（下から 0）, 横の中心（画面幅の割合）, 広がり（画面幅の割合）, 強さ]
+const SHUTTER_DENTS: Array = [[4, 0.3, 0.09, 1.0], [13, 0.77, 0.06, 0.75]]
+## 継ぎ当ての板：[下の板の番号, 上の板の番号, 左端, 右端（画面幅の割合）]。色と四隅のリベットの大きさ（点）
+const SHUTTER_PATCHES: Array = [[8, 9, 0.55, 0.69], [16, 16, 0.1, 0.21]]
+const SHUTTER_PATCH_TINT := Color(1.6, 1.68, 1.78)
+## へこみの陰影の強さと、継ぎ目の歪み（点）
+const SHUTTER_DENT_SHADE: float = 3.2
+const SHUTTER_DENT_WARP_PX: float = 5.0
+const SHUTTER_RIVET_PX: float = 3.0
+
+# 下枠（錆びた角材）と古びた警告の縞
+## 下枠の高さ（点）と鉄の色
+const SHUTTER_FRAME_PX: float = 48.0
+const SHUTTER_FRAME_STEEL := Color(0.12, 0.105, 0.095)
+## 縞の幅（点）、2色（黄色はくすんだ黄土色。UI_BORDER くらいの明るさで、UI_ACCENT より目立たない）、境目のかすれ（点）
+const SHUTTER_STRIPE_PX: float = 26.0
+const SHUTTER_STRIPE_A := Color(0.4, 0.31, 0.14)
+const SHUTTER_STRIPE_B := Color(0.055, 0.05, 0.045)
+const SHUTTER_STRIPE_FRAY_PX: float = 6.0
+## 塗装のはげ：出るしきい値（小さいほど多くはげる）
+const SHUTTER_PEEL_THRESHOLD: float = 0.6
+
+# 光（上から電球1つ）
+## 上の端・下の端の明るさ（倍）、左右の端の暗さ（0〜1）
+const SHUTTER_LIGHT_TOP: float = 1.15
+const SHUTTER_LIGHT_BOTTOM: float = 0.6
+const SHUTTER_LIGHT_SIDE: float = 0.5
+
+## シャッターにだけかけるざらつきとディザ（post_grime.gdshader と同じ計算。画面全体の SCREEN_POST より強く、ARENA_POST くらい）
+const SHUTTER_POST: Dictionary = {
+	"grain": 0.05, "levels": 16.0, "dither": 1.0, "tint": Color(1.0, 0.93, 0.82),
+}
+## 跳ねたり沈んだりしても上が空かないよう、上にはみ出して描く高さ（点）
+const SHUTTER_OVERDRAW_PX: float = 24.0
+
+# 閉じきったときのほこり（粒の位置と動きは番号から決まる式で作る）
+## 粒の数、消えるまでの秒数、横へ広がる速さと上へ舞う速さ（点/秒）、勢いの落ち方、濃さ、色
+const SHUTTER_DUST_COUNT: int = 36
+const SHUTTER_DUST_SEC: float = 1.4
+const SHUTTER_DUST_SPREAD: float = 260.0
+const SHUTTER_DUST_RISE: float = 70.0
+const SHUTTER_DUST_DRAG: float = 2.6
+const SHUTTER_DUST_ALPHA: float = 0.45
+const SHUTTER_DUST := Color(0.46, 0.44, 0.4)
+
+## 待っている間の文字の大きさ
+const SHUTTER_MESSAGE_FONT: int = 26

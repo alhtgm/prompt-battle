@@ -162,18 +162,24 @@ func test_damage_formula() -> void:
 
 func test_loot_and_perks() -> void:
 	var data := _data()
+	var seen_kinds: Dictionary = {}
 	for k: int in 100:
-		var parts: Array = Loot.deal_round(data, Rng.new(k), 5, 1, 1)
-		check_eq(parts.size(), 5, "配布は5つ")
-		var kinds: Dictionary = {}
+		var parts: Array = Loot.deal_round(data, Rng.new(k), 3, 0, 1)
+		check_eq(parts.size(), 3, "配布は3つ")
 		for p: Variant in parts:
+			check(GameData.KINDS.has(p.kind), "配布のパーツの種類が正しい")
+			seen_kinds[p.kind] = true
+		# 種類の下限を付けたとき（今の rules では 0）も、決まりどおりに含まれる
+		var kinds: Dictionary = {}
+		for p: Variant in Loot.deal_round(data, Rng.new(k), 5, 1, 1):
 			kinds[p.kind] = true
-		check_eq(kinds.size(), 3, "フレーム・武器・スキルを各1つ以上")
+		check_eq(kinds.size(), 3, "min_per_kind=1 ならフレーム・武器・スキルを各1つ以上")
 		var perks: Array[String] = Loot.perk_choices(data, Rng.new(k), 3)
 		var uniq: Dictionary = {}
 		for id: String in perks:
 			uniq[id] = true
 		check(perks.size() == 3 and uniq.size() == 3, "パークの候補は重ならない3つ")
+	check_eq(seen_kinds.size(), 3, "種類もランダムに配られる（100回で3種類とも出る）")
 
 
 func test_perk_effects_stack() -> void:
@@ -248,8 +254,8 @@ func test_human_player_flow() -> void:
 	check(t - over_at >= delay - 0.05, "決着してから %.1f 秒の余韻を残して切り替わる（%.2f 秒）" % [delay, t - over_at])
 	s.finish_round_result()
 	check_eq(s.phase, MatchSession.PHASE_LOOT, "ラウンド結果の次は配布とパーク")
-	check_eq(me.new_parts.size(), 5, "パーツが5つ配られる")
-	check_eq(me.hand.size(), 8, "手持ちが 3+5 になる")
+	check_eq(me.new_parts.size(), 3, "パーツが3つ配られる")
+	check_eq(me.hand.size(), 6, "手持ちが 3+3 になる")
 	check(not s.choose_perk(0, "perk_nothing").is_empty(), "候補にないパークは選べない")
 	check_eq(s.choose_perk(0, me.perk_choices[0]), "", "候補のパークを選べる")
 	check(not s.choose_perk(0, me.perk_choices[1]).is_empty(), "1ラウンドに選べるのは1つ")

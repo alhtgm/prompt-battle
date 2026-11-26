@@ -2,14 +2,16 @@
 # 状態の組み立ては「見る人」ごとに行い、見せてはいけないもの（生き残っている間の相手のプロンプト、ほかの人の手持ち）は入れない。
 extends RefCounted
 
-## 回復パック・自爆装置・ハープーンを送るようにし、修理ステーションの値を送らなくしたので 4（違う版どうしはつながらない）
-const VERSION: int = 4
+## 出撃の取り消しと、バトル開始までの残り秒数（start_left）を足したので 5（違う版どうしはつながらない）
+const VERSION: int = 5
 
 # クライアント → サーバー
 const HELLO: String = "hello"
 const START: String = "start"
 const DRAFT_PICK: String = "draft_pick"
 const SUBMIT_BUILD: String = "submit_build"
+## 出撃の取り消し（バトルに移ったあとに届いたものは無視する）
+const CANCEL_BUILD: String = "cancel_build"
 const CHOOSE_PERK: String = "choose_perk"
 const SCRAP_PART: String = "scrap_part"
 const REROLL_PART: String = "reroll_part"

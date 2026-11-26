@@ -15,7 +15,7 @@
     "round.battle_end_delay_sec": "3試合とも決着してから、ラウンド結果の画面に切り替えるまでの余韻（秒）。爆発や勝ち負けを見せるため。「最後まで飛ばす」ではすぐ切り替える",
     "match.max_rounds": "試合が終わらないときの安全装置。このラウンド数で打ち切り、残り体力の順で順位を決める",
     "match.pairing_attempts": "直前の相手と当たらない組み合わせを探す回数",
-    "online": "通信対戦。port は待ち受ける番号。*_sec はサーバーが段階を締め切るまでの時間（全員が操作し終えたらすぐ進む）。state_send_hz は試合の状態、frame_send_hz はバトルの動きを送る回数（毎秒）。frame_log_entries は1回に送る実況の数",
+    "online": "通信対戦。port は待ち受ける番号。*_sec はサーバーが段階を締め切るまでの時間（全員が操作し終えたらすぐ進む）。battle_start_delay_sec は全員が出撃してからバトルを始めるまでの待ち（シャッターの演出の分）。state_send_hz は試合の状態、frame_send_hz はバトルの動きを送る回数（毎秒）。frame_log_entries は1回に送る実況の数",
     "agent.cpu":"CPUの組み立て。フレームは HP×速さ×(1+frame_slot_weight×枠の数) に ±frame_whim の気まぐれ。パーツは抽選の良さに 0〜part_whim の気まぐれ",
     "agent.mock": "仮の頭脳が方針とスキルを選ぶときのしきい値。hp は % 、dist は距離",
     "scrap": "スクラップ（ポイント）。unlock_round ラウンド目から、付けていないパーツを解体して value（種類ごと。抽選の良さが上半分なら +high_roll_bonus）をもらい、付けているパーツの再抽選（reroll_part_cost）とパーク候補の引き直し（reroll_perks_cost、1ラウンド reroll_perks_per_round 回まで）に使う。負けたラウンドは loss_bonus もらえる（最初から貯まる）"
@@ -136,6 +136,7 @@
     "result_view_sec": 8,
     "perk_time_limit_sec": 20,
     "final_view_sec": 30,
+    "battle_start_delay_sec": 2.2,
     "state_send_hz": 5,
     "frame_send_hz": 20,
     "frame_log_entries": 12
@@ -154,8 +155,8 @@
     "loss_bonus": 1
   },
   "loot": {
-    "parts_per_round": 5,
-    "min_per_kind": 1,
+    "parts_per_round": 3,
+    "min_per_kind": 0,
     "perk_choices": 3,
     "hand_limit": 0
   },

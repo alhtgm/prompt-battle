@@ -103,6 +103,7 @@ func test_play_through_from_title_to_final_ranking() -> void:
 	var guard: int = 0
 	while main.session != null and main.session.phase != MatchSession.PHASE_FINISHED and guard < 200:
 		guard += 1
+		await wait_sortie(main)  # 組み立てからバトルへは、出撃のシャッターが開ききってから
 		var phase: String = main.session.phase
 		visited[phase] = true
 		check(_is(main.screen, PHASE_SCREENS[phase]), "段階 %s に合う画面が出ている" % phase)
@@ -112,12 +113,16 @@ func test_play_through_from_title_to_final_ranking() -> void:
 					var g: Node = main.screen
 					var weapons: Array = []
 					var frame: int = -1
+					var frame_slots: int = 0
 					for p: Variant in me.hand:
 						if p.kind == "frame" and frame < 0:
 							frame = p.uid
-						elif p.kind == "weapon" and weapons.size() < 4:
+							frame_slots = main.session.data.get_part(p.def_id).weapon_slots
+					var limit: int = frame_slots + me.extra_weapon_slots(main.session.data)
+					for p: Variant in me.hand:
+						if p.kind == "weapon" and weapons.size() < limit + 1:
 							weapons.append(p.uid)
-					if weapons.size() > 3:
+					if weapons.size() > limit:
 						g.set_selection(frame, weapons, [])
 						check(not g.confirm().is_empty(), "枠を超える武器では出撃できない")
 					g.set_selection(frame, weapons.slice(0, 1), [])

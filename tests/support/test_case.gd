@@ -18,3 +18,12 @@ func check_eq(actual: Variant, expected: Variant, message: String) -> void:
 ## 配列や辞書も中身で比べる（JSON文字列にして比べる）
 static func same(a: Variant, b: Variant) -> bool:
 	return JSON.stringify(a, "", true, true) == JSON.stringify(b, "", true, true)
+
+
+## 出撃のシャッター（view/main.gd）が開ききるまで待つ。シャッターが動いていなければ1フレームだけ待つ（最大 limit_sec 秒）
+func wait_sortie(main: Node, limit_sec: float = 10.0) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	await tree.process_frame
+	var until: int = Time.get_ticks_msec() + int(limit_sec * 1000.0)
+	while main.sortie_active and Time.get_ticks_msec() < until:
+		await tree.process_frame

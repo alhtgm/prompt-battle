@@ -31,6 +31,8 @@ var draft_offer: Dictionary = {}
 var battles: Array[RemoteBattle] = []
 var history: Array = []
 var phase_time_left: float = 0.0
+## バトルが始まるまでの残り秒数（サーバーが全員の出撃後に待つ間だけ 0 より大きい）。シャッターを開く時刻を合わせるのに使う
+var battle_start_left: float = 0.0
 
 ## メッセージを送る関数（type: String, payload: Dictionary）
 var _send: Callable
@@ -90,6 +92,7 @@ func apply_state(st: Dictionary) -> void:
 	round_no = int(st.get("round_no", 0))
 	my_id = int(st.get("my_id", -1))
 	phase_time_left = float(st.get("time_left", 0.0))
+	battle_start_left = float(st.get("start_left", 0.0))
 	history = st.get("history", [])
 
 	var ps: Array[Player] = []
@@ -166,6 +169,7 @@ func apply_frame(f: Dictionary) -> void:
 ## 描くたびに呼ぶ（残り時間を減らし、バトルの動きを滑らかにつなぐ）
 func update(delta: float) -> void:
 	phase_time_left = maxf(0.0, phase_time_left - delta)
+	battle_start_left = maxf(0.0, battle_start_left - delta)
 	for bt: RemoteBattle in battles:
 		bt.sim.advance(delta)
 
@@ -192,6 +196,16 @@ func submit_build(_player_id: int, frame_uid: int, weapon_uids: Array, skill_uid
 	me.build = r["build"]
 	me.prompt = prompt
 	_mark_done()
+	return ""
+
+
+## 出撃を取り消す。サーバーがもうバトルに移っていれば無視され、そのままバトルへ進む
+func cancel_build(_player_id: int) -> String:
+	var me: Player = get_player(my_id)
+	if phase != "build" or me == null or not me.done_this_phase:
+		return "取り消せない"
+	_send.call(Protocol.CANCEL_BUILD, {})
+	me.done_this_phase = false
 	return ""
 
 

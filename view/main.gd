@@ -1,5 +1,6 @@
 # 画面の切り替え役。試合（MatchSession）の今の段階を読み、対応する画面を出す。
 # 試合の状態は読むだけで、操作は MatchSession のメソッドだけを通す。プレイヤーが脱落したら、組み立てとパーク選びを飛ばして観戦を続ける。
+# 組み立てからバトルへは出撃のシャッター（view/shutter.gd）を通す。閉じている間に画面を切り替え、開ききったらバトルを進める。
 extends Control
 
 const GameData := preload("res://core/game_data.gd")
@@ -16,6 +17,10 @@ const Look := preload("res://view/look.gd")
 const PostOverlay := preload("res://view/post_overlay.gd")
 const GameClient := preload("res://net/game_client.gd")
 const OnlineScreen := preload("res://view/online/online_screen.gd")
+const Shutter := preload("res://view/shutter.gd")
+
+## 通信対戦でほかのプレイヤーを待つ間に、閉じたシャッターに出す文字
+const SORTIE_WAIT_TEXT: String = "出撃準備OK。ほかのプレイヤーを待っています"
 
 ## ひとりで遊ぶときの、人間のプレイヤーのID
 const HUMAN_ID: int = 0
@@ -44,6 +49,10 @@ var dev_paused: bool = false
 var dev_pause_label: Label
 var _step_pending: int = 0
 var _shown_round: int = -1
+## 出撃のシャッター（画面を切り替えても残す）
+var shutter: Shutter
+## 出撃の一連（閉じる → 待つ → 画面を切り替える → 開く）の途中か。1人用では、この間バトルを進めない
+var sortie_active: bool = false
 
 
 func _ready() -> void:
@@ -60,6 +69,13 @@ func _ready() -> void:
 	var post := PostOverlay.new()
 	layer.add_child(post)
 	post.setup(Look.SCREEN_POST)
+	# 出撃のシャッター：画面全体の一番手前。ただし、ざらつきの重ね（10）よりは奥
+	var shutter_layer := CanvasLayer.new()
+	shutter_layer.layer = 9
+	add_child(shutter_layer)
+	shutter = Shutter.new()
+	shutter_layer.add_child(shutter)
+	shutter.cancel_requested.connect(cancel_sortie)
 	_add_dev_title_button()
 	data = GameData.new()
 	if not data.load_dir():
@@ -194,6 +210,7 @@ func _input(event: InputEvent) -> void:
 
 func show_title() -> void:
 	set_dev_paused(false)
+	end_sortie()
 	leave_online()
 	session = null
 	_shown_phase = ""
@@ -252,6 +269,7 @@ func start_game(seed_value: int = 0) -> void:
 		setup.append({"name": "CPU%d" % i, "is_human": false})
 	session = MatchSession.new(data, seed_value, setup, agents)
 	battle_speed = 1.0
+	end_sortie()
 	set_dev_paused(false)
 	_shown_phase = ""
 	_sync_screen()
@@ -264,6 +282,7 @@ func _process(delta: float) -> void:
 			session = online.session
 			_shown_phase = ""
 		if session == null:
+			end_sortie()  # 通信が切れた・待合室に戻ったら、シャッターを残さない
 			if screen == null or screen.get_script() != OnlineScreen:
 				_show(OnlineScreen.new())
 			return
@@ -280,9 +299,11 @@ func _process(delta: float) -> void:
 			# 止めている間は進めない。1コマ送りのときだけ、1刻み分（速さの倍率はかけない）進める
 			if _step_pending > 0:
 				_step_pending -= 1
-				session.update(1.0 / float(data.rule("tick_rate")))
+				session.update(0.0 if _holding_battle() else 1.0 / float(data.rule("tick_rate")))
 			# 止めていても、操作（出撃ボタンなど）で段階が変わったら画面は切り替える
+			_update_sortie(me)
 			_sync_screen()
+			_apply_shake()
 			return
 	if not me.alive:  # 脱落したら自分の操作はないので、そのまま進める
 		if session.phase == MatchSession.PHASE_BUILD:
@@ -290,13 +311,106 @@ func _process(delta: float) -> void:
 		elif session.phase == MatchSession.PHASE_LOOT:
 			session.finish_loot()
 	var speed: float = battle_speed if session.phase == MatchSession.PHASE_BATTLE else 1.0
+	if _holding_battle():
+		speed = 0.0  # シャッターが開ききるまでバトルを始めない
 	session.update(delta * speed)
+	_update_sortie(me)
 	_sync_screen()
+	_apply_shake()
+
+
+# ---- 出撃のシャッター ----
+
+## 出撃した（組み立て画面の「出撃」で、機体が正しいと確かめたあと）。シャッターを閉じ始める
+func begin_sortie() -> void:
+	if sortie_active or shutter == null:
+		return
+	sortie_active = true
+	get_viewport().gui_release_focus()  # 閉じている間に、下の画面の欄へ文字が入らないように
+	shutter.close()
+
+
+## 待っている間のキャンセル：出撃を取り消し、シャッターを開いて組み立て画面に戻る（バトルに移ったあとは何もしない）
+func cancel_sortie() -> void:
+	if not sortie_active or session == null or session.phase != MatchSession.PHASE_BUILD:
+		return
+	session.cancel_build(human_id)
+	sortie_active = false
+	shutter.open()
+	if screen != null and screen.has_method("on_sortie_cancelled"):
+		screen.call("on_sortie_cancelled")
+
+
+## シャッターをすぐに片付ける（タイトルへ戻る・試合が飛んだ・通信が切れたとき）
+func end_sortie() -> void:
+	sortie_active = false
+	if shutter != null:
+		shutter.reset()
+	if screen != null:
+		screen.position = Vector2.ZERO
+
+
+## 1人用で、シャッターのためにバトルを止めておく間か（組み立ての段階は止めない）
+func _holding_battle() -> bool:
+	return sortie_active and session != null and not session.is_online() 		and session.phase == MatchSession.PHASE_BATTLE
+
+
+## 出撃の一連を進める。締め切りで自動出撃したときもここで閉じ始める
+func _update_sortie(me: Variant) -> void:
+	if session == null:
+		end_sortie()
+		return
+	var ph: String = session.phase
+	if not sortie_active:
+		# 組み立て画面のままバトルに移った（制限時間切れの自動出撃、バトルに移ったあとの取り消し）。脱落して観戦中は出さない
+		if ph == MatchSession.PHASE_BATTLE and _shown_phase == MatchSession.PHASE_BUILD and me.alive:
+			begin_sortie()
+		else:
+			return
+	if ph != MatchSession.PHASE_BUILD and ph != MatchSession.PHASE_BATTLE:
+		end_sortie()  # 「最後まで飛ばす」などでバトルを飛ばした
+		return
+	if ph == MatchSession.PHASE_BUILD:
+		# 通信対戦でほかのプレイヤーを待っている間（1人用は出撃するとすぐバトルに移るので、ここには来ない）
+		var waiting: bool = shutter.is_closed()
+		shutter.set_waiting(SORTIE_WAIT_TEXT if waiting else "", waiting)
+		return
+	shutter.set_waiting("", false)
+	var start_left: float = session.battle_start_left if session.is_online() else -1.0
+	if shutter.state == Shutter.State.CLOSING or shutter.shaking:
+		# 通信対戦：閉じる＋開くが開始に間に合わなければ速める
+		if start_left >= 0.0:
+			var need: float = shutter.time_to_closed() + Look.SHUTTER_OPEN_SEC
+			if start_left < need:
+				shutter.set_speed(need / maxf(start_left, 0.01))
+		return
+	if shutter.is_closed():
+		if _shown_phase != MatchSession.PHASE_BATTLE:
+			_sync_screen(true)  # シャッターの裏でバトル画面に切り替える
+		if start_left >= 0.0:
+			# 開ききるのがちょうど開始の時刻になるように待ってから開く
+			if start_left > Look.SHUTTER_OPEN_SEC:
+				return
+			shutter.set_speed(Look.SHUTTER_OPEN_SEC / maxf(start_left, 0.01))
+		elif shutter.closed_time < Look.SHUTTER_CLOSED_HOLD_SEC:
+			return  # 1人用：閉じたまま少し待ってから開く
+		shutter.open()
+	elif shutter.is_open():
+		sortie_active = false  # 開ききった。次の刻みからバトルが進む
+
+
+## シャッターの揺れを画面全体にもかける
+func _apply_shake() -> void:
+	if screen != null and shutter != null and (shutter.shaking or screen.position != Vector2.ZERO):
+		screen.position = shutter.shake_offset()
 
 
 ## 試合の段階が変わっていれば、対応する画面に切り替える
-func _sync_screen() -> void:
+func _sync_screen(force_battle: bool = false) -> void:
 	if session == null or (session.phase == _shown_phase and session.round_no == _shown_round):
+		return
+	# 出撃のシャッターが閉じきるまでは、バトル画面に切り替えない
+	if sortie_active and session.phase == MatchSession.PHASE_BATTLE and not force_battle and not shutter.is_closed():
 		return
 	_shown_phase = session.phase
 	_shown_round = session.round_no

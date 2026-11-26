@@ -173,6 +173,20 @@ func submit_build(player_id: int, frame_uid: int, weapon_uids: Array, skill_uids
 	return ""
 
 
+## 出撃を取り消す（出撃済みを戻す）。選んだ機体とプロンプトは残すので、取り消したまま締め切るとその機体で出撃する。
+## 組み立ての段階で出撃済みのときだけ。問題がなければ空文字
+func cancel_build(player_id: int) -> String:
+	if phase != PHASE_BUILD:
+		return "今は組み立ての段階ではない"
+	var p: Player = get_player(player_id)
+	if p == null or not p.alive:
+		return "そのプレイヤーは参加していない"
+	if not p.done_this_phase:
+		return "まだ出撃していない"
+	p.done_this_phase = false
+	return ""
+
+
 ## 出撃できるかだけを調べる（状態は変えない）。組み立て画面が、押す前に問題を見せるのに使う
 func check_build(player_id: int, frame_uid: int, weapon_uids: Array, skill_uids: Array, prompt: String) -> String:
 	var p: Player = get_player(player_id)

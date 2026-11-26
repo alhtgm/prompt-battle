@@ -552,8 +552,16 @@ func confirm() -> String:
 		return err
 	_submitted = _selection_key()
 	_update_status()
+	if main.has_method("begin_sortie"):
+		main.begin_sortie()  # シャッターを閉じ始める（1人用では、次の finish_build ですぐバトルの段階に移る）
 	session().finish_build()
 	return ""
+
+
+## 待っている間にシャッターのキャンセルで出撃を取り消した（選んだ機体とプロンプトはそのまま）
+func on_sortie_cancelled() -> void:
+	_submitted = ""
+	_update_status()
 
 
 ## 今の選び方とプロンプトをまとめた文字列（送ったあとに直したかを見分けるため）
@@ -571,7 +579,7 @@ func _update_status() -> void:
 	if _submitted.is_empty():
 		return
 	elif _submitted == _selection_key():
-		show_waiting(_status, "出撃準備OK。ほかのプレイヤーを待っています（直して押し直してもよい）")
+		show_waiting(_status, "出撃準備OK。ほかのプレイヤーを待っています")
 	elif session().is_online():
 		_status.text = "直した内容はまだ送っていない。もう一度「出撃」を押すと送り直す"
 		_status.add_theme_color_override("font_color", COL_ACCENT)

@@ -57,9 +57,9 @@ func test_pause_stops_every_phase_and_steps_one_tick() -> void:
 	await _frames(3)
 	var dt: float = 1.0 / float(main.data.rule("tick_rate"))
 	check(absf(main.session.phase_time_left - (left - dt)) < 0.0001, "1コマ送りでちょうど1刻みだけ進む")
-	# バトルも止まる
+	# バトルも止まる（止めていても、出撃のシャッターは閉じて開く）
 	main.session.finish_build()
-	await _frame()
+	await wait_sortie(main)
 	check(main.screen is BattleScreen, "バトルの画面")
 	var sim: Variant = main.screen.watched_battle.sim
 	var tick: int = sim.tick
@@ -98,7 +98,7 @@ func test_pause_and_camera_do_not_change_results() -> void:
 	main.session.finish_draft()
 	await _frame()
 	main.session.finish_build()
-	await _frame()
+	await wait_sortie(main)
 	var b: Node = main.screen
 	for k: int in 6:
 		main.set_dev_paused(k % 2 == 0)
@@ -131,7 +131,7 @@ func test_dev_camera_moves() -> void:
 	main.session.finish_draft()
 	await _frame()
 	main.session.finish_build()
-	await _frames(2)
+	await wait_sortie(main)
 	var arena: Node3D = main.screen.arena
 	var cam: Camera3D = arena.camera
 	check_eq(arena.camera_mode, ArenaView.CameraMode.FOLLOW, "最初はいつもの追いかけるカメラ")
